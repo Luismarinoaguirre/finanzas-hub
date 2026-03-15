@@ -1055,6 +1055,7 @@ tr:hover td { background: rgba(255,255,255,0.025); }
       </select>
       <button class="btn btn-glass" onclick="openNewTxn()">＋ Cargar</button>
       <button class="btn btn-primary" onclick="document.getElementById('csvInput').click()">↑ Importar CSV</button>
+      <button class="btn" id="cloud-sync-btn" onclick="cloudSyncFull()" style="background:#1a73e8;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;margin-left:6px;">☁ Sync</button>
     </div>
   </div>
 
@@ -1980,6 +1981,12 @@ tr:hover td { background: rgba(255,255,255,0.025); }
 
 <script>
 // ═══════════════════════════════════════════════
+//  CLOUD SYNC CONFIG
+// ═══════════════════════════════════════════════
+const CLOUD_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwZkKBM1Bv_6WA-E1gpnYavesVJdQlQR4gxYuOLp-QQBTp10ERM0_5-aWeSPUjlkEYKug/exec';
+let _cloudSyncTimer = null;
+
+// ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
 const DEFAULT_CATS = ['Laburo','Préstamo','Deporte','Kiosco','Compras','Regalo','Comisión','Cuentas','Personal','Transferencia','Gastronomía','Estudios','Transporte','Ropa','Suscripciones','Supermercado','Salud','Entretenimiento','Viajes','Servicios','Tecnología','Otros'];
@@ -2011,7 +2018,113 @@ let editingTxnId = null;
 //  PERSIST
 // ═══════════════════════════════════════════════
 function saveState() {
-  try { localStorage.setItem('finanzas_hub_v4', JSON.stringify(state)); } catch(e) {}
+  try {
+    localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
+    localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
+    debouncedCloudPush();
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════
+//  CLOUD SYNC (between devices)
+// ═══════════════════════════════════════════════
+async function cloudSyncPush() {
+  if (!CLOUD_SYNC_URL) return;
+  try {
+    const data = {
+      timestamp: Date.now(),
+      state: JSON.parse(localStorage.getItem('finanzas_hub_v4') || '{}')
+    };
+    await fetch(CLOUD_SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      mode: 'no-cors'
+    });
+  } catch(e) {
+    console.warn('Cloud sync push failed:', e);
+  }
+}
+
+async function cloudSyncPull() {
+  if (!CLOUD_SYNC_URL) return null;
+  try {
+    const res = await fetch(CLOUD_SYNC_URL);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.timestamp && data.state) {
+      return data;
+    }
+    return null;
+  } catch(e) {
+    console.warn('Cloud sync pull failed:', e);
+    return null;
+  }
+}
+
+function debouncedCloudPush() {
+  if (_cloudSyncTimer) clearTimeout(_cloudSyncTimer);
+  _cloudSyncTimer = setTimeout(() => cloudSyncPush(), 3000);
+}
+
+async function cloudSyncFull() {
+  const btn = document.getElementById('cloud-sync-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '☁ Sincronizando…'; }
+
+  try {
+    // Pull from cloud
+    const cloud = await cloudSyncPull();
+    const localTimestamp = parseInt(localStorage.getItem('finanzas_hub_v4_ts') || '0');
+
+    let newFromCloud = [];
+    if (cloud && cloud.timestamp > localTimestamp) {
+      // Cloud is newer - merge cloud data
+      const cloudState = cloud.state;
+      if (cloudState.transactions && cloudState.transactions.length > 0) {
+        // Merge transactions: keep all unique by ID
+        const localIds = new Set(state.transactions.map(t => t.id));
+        newFromCloud = cloudState.transactions.filter(t => !localIds.has(t.id));
+        newFromCloud.forEach(t => { if (t.date) t.date = new Date(t.date); });
+        if (newFromCloud.length > 0) {
+          state.transactions = [...state.transactions, ...newFromCloud];
+        }
+        // Also check if cloud has updates to existing transactions
+        const cloudById = {};
+        cloudState.transactions.forEach(t => { cloudById[t.id] = t; });
+        state.transactions = state.transactions.map(t => {
+          if (cloudById[t.id]) {
+            const ct = { ...cloudById[t.id] };
+            ct.date = new Date(ct.date);
+            return ct;
+          }
+          return t;
+        });
+      }
+      // Merge config (non-transaction state)
+      const { transactions: _t, ...cloudConfig } = cloudState;
+      const { transactions: _t2, ...localConfig } = state;
+      state = { ...state, ...cloudConfig, transactions: state.transactions };
+
+      saveState();
+      showToast('☁ ' + newFromCloud.length + ' cambios sincronizados desde la nube', 'success');
+    } else {
+      showToast('☁ Todo sincronizado', 'success');
+    }
+
+    // Push current state to cloud
+    localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
+    await cloudSyncPush();
+
+    // Refresh UI
+    if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof updateSidebarBalance === 'function') updateSidebarBalance();
+
+  } catch(e) {
+    console.error('Cloud sync error:', e);
+    showToast('Error de sincronización: ' + e.message, 'error');
+  }
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '☁ Sync'; }
 }
 
 // Default config embedded from user's backup — used when no localStorage exists
@@ -4568,6 +4681,8 @@ function init() {
 
 init();
 updateMobileNav('dashboard');
+// Auto-sync from cloud on page load
+setTimeout(() => cloudSyncFull(), 2000);
 </script>
 
 <div class="mobile-nav" id="mobile-nav">
