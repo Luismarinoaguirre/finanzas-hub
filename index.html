@@ -906,10 +906,44 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   .charts-row { grid-template-columns: 1fr; }
   .top5-grid { grid-template-columns: repeat(3, 1fr); }
 }
+/* Mobile Bottom Nav */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(14,17,24,0.92);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: 1px solid var(--glass-border);
+  z-index: 999;
+  padding: 6px 0 env(safe-area-inset-bottom, 8px);
+}
+.mobile-nav-scroll {
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  gap: 2px;
+  padding: 0 6px;
+}
+.mobile-nav-scroll::-webkit-scrollbar { display: none; }
+.mobile-nav-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 10px; min-width: 56px;
+  background: none; border: none; color: var(--text-tertiary);
+  font-size: 9px; font-family: var(--font); cursor: pointer;
+  border-radius: var(--r-xs); transition: color 0.2s;
+  flex-shrink: 0;
+}
+.mobile-nav-btn span:first-child { font-size: 18px; }
+.mobile-nav-btn.active { color: var(--blue-light); }
+.mobile-nav-btn:active { background: var(--bg-surface); }
+
 @media (max-width: 768px) {
   .app-layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .main { padding: 20px 16px; }
+  .mobile-nav { display: block; }
+  .main { padding: 20px 16px 90px; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
   .top5-grid { grid-template-columns: 1fr 1fr; }
   .modal-grid { grid-template-columns: 1fr; }
@@ -2099,6 +2133,7 @@ function nav(page) {
   if (page === 'insights') { loadNote(); populateInsightsSelect(); }
   if (page === 'pending') renderPending();
   if (page === 'settings') renderSettings();
+  updateMobileNav(page);
 }
 
 // ═══════════════════════════════════════════════
@@ -4505,6 +4540,16 @@ function deleteAccount() {
   showToast('Cuenta eliminada');
 }
 
+function mobileNav(page) {
+  nav(page);
+  updateMobileNav(page);
+}
+function updateMobileNav(page) {
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.page === page);
+  });
+}
+
 function init() {
   loadState();
   renderDashboard();
@@ -4522,6 +4567,22 @@ function init() {
 }
 
 init();
+updateMobileNav('dashboard');
 </script>
+
+<div class="mobile-nav" id="mobile-nav">
+  <div class="mobile-nav-scroll">
+    <button class="mobile-nav-btn active" data-page="dashboard" onclick="mobileNav('dashboard')"><span>📊</span>Dashboard</button>
+    <button class="mobile-nav-btn" data-page="transactions" onclick="mobileNav('transactions')"><span>↕</span>Movimientos</button>
+    <button class="mobile-nav-btn" data-page="cuentas" onclick="mobileNav('cuentas')"><span>🏦</span>Cuentas</button>
+    <button class="mobile-nav-btn" data-page="tarjetas" onclick="mobileNav('tarjetas')"><span>💳</span>Tarjetas</button>
+    <button class="mobile-nav-btn" data-page="cuotas" onclick="mobileNav('cuotas')"><span>📋</span>Cuotas</button>
+    <button class="mobile-nav-btn" data-page="compare" onclick="mobileNav('compare')"><span>⇄</span>Comparar</button>
+    <button class="mobile-nav-btn" data-page="goals" onclick="mobileNav('goals')"><span>◎</span>Metas</button>
+    <button class="mobile-nav-btn" data-page="pending" onclick="mobileNav('pending')"><span>🔔</span>Pendientes</button>
+    <button class="mobile-nav-btn" data-page="insights" onclick="mobileNav('insights')"><span>◈</span>Insights</button>
+    <button class="mobile-nav-btn" data-page="settings" onclick="mobileNav('settings')"><span>⚙</span>Config</button>
+  </div>
+</div>
 </body>
 </html>
