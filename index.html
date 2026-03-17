@@ -1014,9 +1014,6 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   <button class="nav-item" id="ni-new-txn" onclick="openNewTxn()">
     <span class="nav-icon">＋</span> Cargar gasto
   </button>
-  <button class="nav-item" id="ni-recurring" onclick="nav('recurring')">
-    <span class="nav-icon">🔄</span> Recurrentes
-  </button>
   <button class="nav-item" id="ni-settings" onclick="nav('settings')">
     <span class="nav-icon">⚙</span> Configuración
   </button>
@@ -1536,10 +1533,11 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   <div class="page-header fade-up">
     <div>
       <div class="page-title">Gastos Fijos</div>
-      <div class="page-subtitle" id="fixed-subtitle">Análisis de gastos recurrentes y fijos</div>
+      <div class="page-subtitle" id="fixed-subtitle">Administrá y analizá tus gastos recurrentes</div>
     </div>
     <div class="page-actions">
       <select id="fixed-month" class="filter-select" onchange="renderFixed()" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border);padding:8px 12px;border-radius:8px;"></select>
+      <button class="btn btn-primary" onclick="openRecurringModal()">＋ Nuevo</button>
     </div>
   </div>
 
@@ -1551,9 +1549,9 @@ tr:hover td { background: rgba(255,255,255,0.025); }
       <div id="fixed-kpi-pct" style="font-size:12px;color:var(--text-tertiary);margin-top:2px;">0% del gasto total</div>
     </div>
     <div class="glass-card" style="padding:20px;">
-      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Cantidad</div>
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Activos</div>
       <div id="fixed-kpi-count" style="font-size:28px;font-weight:700;margin-top:6px;">0</div>
-      <div style="font-size:12px;color:var(--text-tertiary);margin-top:2px;">gastos fijos activos</div>
+      <div style="font-size:12px;color:var(--text-tertiary);margin-top:2px;">gastos fijos configurados</div>
     </div>
     <div class="glass-card" style="padding:20px;">
       <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Promedio por gasto</div>
@@ -1567,14 +1565,20 @@ tr:hover td { background: rgba(255,255,255,0.025); }
     </div>
   </div>
 
-  <!-- Categories breakdown -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="fade-up d3" id="fixed-grid">
+  <!-- Recurring expenses management list -->
+  <div class="glass-card fade-up d3" style="padding:20px;margin-bottom:20px;">
+    <div class="chart-card-title" style="margin-bottom:14px;">Mis gastos fijos</div>
+    <div id="recurring-list"></div>
+  </div>
+
+  <!-- Categories breakdown + Detail -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="fade-up d4" id="fixed-grid">
     <div class="glass-card" style="padding:20px;">
       <div class="chart-card-title">Por categoría</div>
       <div id="fixed-by-cat" style="margin-top:14px;"></div>
     </div>
     <div class="glass-card" style="padding:20px;">
-      <div class="chart-card-title">Detalle de gastos fijos</div>
+      <div class="chart-card-title">Detalle del mes</div>
       <div id="fixed-detail-list" style="margin-top:14px;max-height:400px;overflow-y:auto;"></div>
     </div>
   </div>
@@ -1727,24 +1731,6 @@ tr:hover td { background: rgba(255,255,255,0.025); }
 <!-- ══════════════════════════
      RECURRENTES
 ══════════════════════════ -->
-<div id="page-recurring" class="page">
-  <div class="page-header fade-up">
-    <div>
-      <div class="page-title">Gastos Recurrentes</div>
-      <div class="page-subtitle">Gastos fijos que se cargan automáticamente cada mes</div>
-    </div>
-    <div class="page-actions">
-      <button class="btn btn-primary" onclick="openRecurringModal()">＋ Nuevo</button>
-    </div>
-  </div>
-  <div class="glass-card fade-up d2" style="padding:20px;margin-bottom:20px;">
-    <div style="display:flex;gap:24px;flex-wrap:wrap;">
-      <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Total mensual</div><div id="rec-total" style="font-size:28px;font-weight:700;margin-top:4px;">$0</div></div>
-      <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Activos</div><div id="rec-active" style="font-size:28px;font-weight:700;margin-top:4px;">0</div></div>
-    </div>
-  </div>
-  <div id="recurring-list" class="fade-up d3"></div>
-</div>
 
 <!-- ══════════════════════════
      GRÁFICOS AVANZADOS
@@ -2516,7 +2502,6 @@ function nav(page) {
   if (page === 'fixed') renderFixed();
   if (page === 'reports') initReportFilters();
   if (page === 'pending') renderPending();
-  if (page === 'recurring') renderRecurring();
   if (page === 'charts') renderAdvancedCharts();
   if (page === 'settings') renderSettings();
   updateMobileNav(page);
@@ -4553,6 +4538,34 @@ function renderFixed() {
     document.getElementById('fixed-kpi-vs-sub').textContent = 'sin datos previos';
   }
 
+  // Render recurring expenses management list
+  const recs = state.recurringExpenses || [];
+  const activeRecs = recs.filter(r => r.active);
+  document.getElementById('fixed-kpi-count').textContent = activeRecs.length;
+
+  const listEl = document.getElementById('recurring-list');
+  if (!recs.length) {
+    listEl.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:32px;margin-bottom:8px;">📌</div><div style="font-size:13px;color:var(--text-secondary);">No hay gastos fijos configurados. Tocá "+ Nuevo" para agregar uno.</div></div>';
+  } else {
+    listEl.innerHTML = recs.map(r =>
+      '<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);opacity:' + (r.active ? 1 : 0.5) + ';">' +
+        '<div style="width:8px;height:40px;border-radius:4px;background:' + catColor(r.category) + ';flex-shrink:0;"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:600;font-size:14px;">' + esc(r.description) + '</div>' +
+          '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">' + esc(r.category) + ' · ' + esc(r.bank || '—') + ' · ' + (r.frequency === 'monthly' ? 'Día ' + r.dayOfMonth : r.frequency === 'weekly' ? 'Semanal' : 'Quincenal') + '</div>' +
+        '</div>' +
+        '<div style="font-size:18px;font-weight:700;white-space:nowrap;">' + fmtM(r.amount, r.currency) + '</div>' +
+        '<label style="position:relative;width:44px;height:24px;flex-shrink:0;cursor:pointer;">' +
+          '<input type="checkbox" ' + (r.active ? 'checked' : '') + ' onchange="toggleRecurring(\'' + r.id + '\')" style="opacity:0;width:0;height:0;position:absolute;">' +
+          '<span style="position:absolute;inset:0;background:' + (r.active ? 'var(--blue)' : 'rgba(255,255,255,0.1)') + ';border-radius:12px;transition:.3s;"></span>' +
+          '<span style="position:absolute;top:2px;left:' + (r.active ? '22px' : '2px') + ';width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;"></span>' +
+        '</label>' +
+        '<button onclick="openRecurringModal(\'' + r.id + '\')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:16px;padding:4px 8px;">✏️</button>' +
+        '<button onclick="deleteRecurringAndRefresh(\'' + r.id + '\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:4px 8px;">🗑</button>' +
+      '</div>'
+    ).join('');
+  }
+
   // By category
   const byCat = {};
   fixedTxns.forEach(t => {
@@ -5116,37 +5129,6 @@ function updateMobileNav(page) {
 // ═══════════════════════════════════════════════
 //  RECURRING EXPENSES
 // ═══════════════════════════════════════════════
-function renderRecurring() {
-  const list = document.getElementById('recurring-list');
-  const recs = state.recurringExpenses || [];
-  const activeRecs = recs.filter(r => r.active);
-  const totalMonthly = activeRecs.filter(r => r.currency === 'ARS').reduce((s, r) => s + r.amount, 0);
-  document.getElementById('rec-total').textContent = '$' + fmtN(totalMonthly);
-  document.getElementById('rec-active').textContent = activeRecs.length;
-
-  if (!recs.length) {
-    list.innerHTML = '<div class="glass-card" style="padding:40px;text-align:center;"><div style="font-size:40px;margin-bottom:12px;">🔄</div><div style="font-size:16px;font-weight:600;margin-bottom:6px;">No hay gastos recurrentes</div><div style="font-size:13px;color:var(--text-secondary);">Agregá tus gastos fijos como Netflix, gym o alquiler para que se carguen automáticamente cada mes.</div></div>';
-    return;
-  }
-
-  list.innerHTML = recs.map(r => `
-    <div class="glass-card" style="padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:16px;opacity:${r.active ? 1 : 0.5};">
-      <div style="width:8px;height:40px;border-radius:4px;background:${catColor(r.category)};flex-shrink:0;"></div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:14px;">${esc(r.description)}</div>
-        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${esc(r.category)} · ${esc(r.bank || '—')} · ${r.frequency === 'monthly' ? 'Día ' + r.dayOfMonth : r.frequency === 'weekly' ? 'Semanal' : 'Quincenal'}</div>
-      </div>
-      <div style="font-size:18px;font-weight:700;white-space:nowrap;">${fmtM(r.amount, r.currency)}</div>
-      <label style="position:relative;width:44px;height:24px;flex-shrink:0;cursor:pointer;">
-        <input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRecurring('${r.id}')" style="opacity:0;width:0;height:0;position:absolute;">
-        <span style="position:absolute;inset:0;background:${r.active ? 'var(--blue)' : 'rgba(255,255,255,0.1)'};border-radius:12px;transition:.3s;"></span>
-        <span style="position:absolute;top:2px;left:${r.active ? '22px' : '2px'};width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;"></span>
-      </label>
-      <button onclick="openRecurringModal('${r.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:16px;padding:4px 8px;">✏️</button>
-      <button onclick="deleteRecurring('${r.id}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:4px 8px;">🗑</button>
-    </div>
-  `).join('');
-}
 
 function openRecurringModal(id) {
   const catSel = document.getElementById('rec-category');
@@ -5210,20 +5192,27 @@ function saveRecurring() {
   } else {
     state.recurringExpenses.push(obj);
   }
-  saveState(); closeModal('modal-recurring'); renderRecurring();
+  saveState(); closeModal('modal-recurring'); renderFixed();
   showToast(editId ? 'Recurrente actualizado' : 'Recurrente creado');
 }
 
 function deleteRecurring(id) {
   if (!confirm('¿Eliminar este gasto recurrente?')) return;
   state.recurringExpenses = (state.recurringExpenses || []).filter(r => r.id !== id);
-  saveState(); renderRecurring();
+  saveState(); renderFixed();
   showToast('Recurrente eliminado');
+}
+
+function deleteRecurringAndRefresh(id) {
+  if (!confirm('¿Eliminar este gasto fijo?')) return;
+  state.recurringExpenses = (state.recurringExpenses || []).filter(r => r.id !== id);
+  saveState(); renderFixed();
+  showToast('Gasto fijo eliminado');
 }
 
 function toggleRecurring(id) {
   const r = (state.recurringExpenses || []).find(x => x.id === id);
-  if (r) { r.active = !r.active; saveState(); renderRecurring(); }
+  if (r) { r.active = !r.active; saveState(); renderFixed(); }
 }
 
 function generateRecurringTransactions(monthKey) {
@@ -5589,7 +5578,6 @@ function installApp() {
     <button class="mobile-nav-btn" data-page="pending" onclick="mobileNav('pending')"><span>🔔</span>Pendientes</button>
     <button class="mobile-nav-btn" data-page="fixed" onclick="mobileNav('fixed')"><span>📌</span>Fijos</button>
     <button class="mobile-nav-btn" data-page="reports" onclick="mobileNav('reports')"><span>📋</span>Reportes</button>
-    <button class="mobile-nav-btn" data-page="recurring" onclick="mobileNav('recurring')"><span>🔄</span>Recurrentes</button>
     <button class="mobile-nav-btn" data-page="charts" onclick="mobileNav('charts')"><span>📈</span>Gráficos</button>
     <button class="mobile-nav-btn" data-page="settings" onclick="mobileNav('settings')"><span>⚙</span>Config</button>
   </div>
