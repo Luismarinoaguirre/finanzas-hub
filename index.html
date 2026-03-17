@@ -692,30 +692,6 @@ tr:hover td { background: rgba(255,255,255,0.025); }
 .goal-fill { height: 100%; border-radius: 3px; transition: width 0.9s cubic-bezier(0.34,1.56,0.64,1); }
 .goal-pct { font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); }
 
-/* ═══════════════════════════
-   INSIGHTS / NOTES
-═══════════════════════════ */
-.insight-card {
-  padding: 16px 18px;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  border-radius: var(--r-sm);
-  margin-bottom: 10px;
-  transition: border-color 0.2s;
-}
-.insight-card.good { background: rgba(52,211,153,0.05); border: 1px solid rgba(52,211,153,0.15); }
-.insight-card.warn { background: rgba(251,146,60,0.05); border: 1px solid rgba(251,146,60,0.15); }
-.insight-card.bad { background: rgba(248,113,113,0.05); border: 1px solid rgba(248,113,113,0.15); }
-.insight-card.info { background: rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.15); }
-.insight-emoji { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
-.insight-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
-.insight-label.good { color: var(--green); }
-.insight-label.warn { color: var(--orange); }
-.insight-label.bad { color: var(--red); }
-.insight-label.info { color: var(--blue-light); }
-.insight-headline { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 5px; }
-.insight-body { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); line-height: 1.6; }
 
 /* ═══════════════════════════
    TOAST
@@ -958,6 +934,7 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   .cmp-hero { grid-template-columns: 1fr; }
   .cmp-vs { display: none; }
   #charts-advanced-grid { grid-template-columns: 1fr !important; }
+  #fixed-grid { grid-template-columns: 1fr !important; }
 }
 
 /* Select months dropdown */
@@ -1020,8 +997,11 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   <button class="nav-item" id="ni-goals" onclick="nav('goals')">
     <span class="nav-icon">◎</span> Metas
   </button>
-  <button class="nav-item" id="ni-insights" onclick="nav('insights')">
-    <span class="nav-icon">◈</span> Insights IA
+  <button class="nav-item" id="ni-fixed" onclick="nav('fixed')">
+    <span class="nav-icon">📌</span> Gastos Fijos
+  </button>
+  <button class="nav-item" id="ni-reports" onclick="nav('reports')">
+    <span class="nav-icon">📋</span> Reportes
   </button>
   <button class="nav-item" id="ni-charts" onclick="nav('charts')">
     <span class="nav-icon">📈</span> Gráficos
@@ -1550,35 +1530,165 @@ tr:hover td { background: rgba(255,255,255,0.025); }
 </div>
 
 <!-- ══════════════════════════
-     INSIGHTS IA
+     GASTOS FIJOS
 ══════════════════════════ -->
-<div id="page-insights" class="page">
+<div id="page-fixed" class="page">
   <div class="page-header fade-up">
     <div>
-      <div class="page-title">Insights IA</div>
-      <div class="page-subtitle">Análisis inteligente de tus finanzas</div>
+      <div class="page-title">Gastos Fijos</div>
+      <div class="page-subtitle" id="fixed-subtitle">Análisis de gastos recurrentes y fijos</div>
     </div>
-    <div class="header-actions">
-      <select id="insights-month-select" class="txn-select" onchange="renderInsights()">
-        <option value="">Mes actual</option>
-      </select>
-      <button class="btn btn-primary" onclick="generateInsights()">⚡ Generar</button>
+    <div class="page-actions">
+      <select id="fixed-month" class="filter-select" onchange="renderFixed()" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border);padding:8px 12px;border-radius:8px;"></select>
     </div>
   </div>
 
-  <div id="insights-loading" style="display:none;" class="glass-card" style="padding:32px;text-align:center;">
-    <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:32px;">
-      <div class="spinner"></div>
-      <span style="color:var(--text-tertiary);font-size:14px;">Analizando tus finanzas...</span>
+  <!-- KPIs row -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;" class="fade-up d2">
+    <div class="glass-card" style="padding:20px;">
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Total Gastos Fijos</div>
+      <div id="fixed-kpi-total" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+      <div id="fixed-kpi-pct" style="font-size:12px;color:var(--text-tertiary);margin-top:2px;">0% del gasto total</div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Cantidad</div>
+      <div id="fixed-kpi-count" style="font-size:28px;font-weight:700;margin-top:6px;">0</div>
+      <div style="font-size:12px;color:var(--text-tertiary);margin-top:2px;">gastos fijos activos</div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Promedio por gasto</div>
+      <div id="fixed-kpi-avg" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+      <div style="font-size:12px;color:var(--text-tertiary);margin-top:2px;">monto promedio</div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">vs Mes Anterior</div>
+      <div id="fixed-kpi-vs" style="font-size:28px;font-weight:700;margin-top:6px;">—</div>
+      <div id="fixed-kpi-vs-sub" style="font-size:12px;color:var(--text-tertiary);margin-top:2px;">comparación</div>
     </div>
   </div>
 
-  <div id="insights-feed" class="fade-up d1"></div>
+  <!-- Categories breakdown -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="fade-up d3" id="fixed-grid">
+    <div class="glass-card" style="padding:20px;">
+      <div class="chart-card-title">Por categoría</div>
+      <div id="fixed-by-cat" style="margin-top:14px;"></div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+      <div class="chart-card-title">Detalle de gastos fijos</div>
+      <div id="fixed-detail-list" style="margin-top:14px;max-height:400px;overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
 
-  <div class="glass-card fade-up d2" style="padding:22px 24px;">
-    <div class="chart-card-title" style="margin-bottom:4px;">Notas del mes</div>
-    <div class="chart-card-sub">Recordatorios y anotaciones personales</div>
-    <textarea id="notes-area" class="input-field" rows="5" placeholder="Anotá recordatorios, metas o cualquier cosa importante del mes..." style="margin-top:10px;resize:vertical;line-height:1.6;" oninput="saveNote()"></textarea>
+<!-- ══════════════════════════
+     REPORTES
+══════════════════════════ -->
+<div id="page-reports" class="page">
+  <div class="page-header fade-up">
+    <div>
+      <div class="page-title">Reportes</div>
+      <div class="page-subtitle">Generá reportes personalizados con filtros avanzados</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" onclick="generateReport()">📊 Generar reporte</button>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="glass-card fade-up d2" style="padding:20px;margin-bottom:20px;">
+    <div class="chart-card-title" style="margin-bottom:14px;">Filtros</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+      <div class="input-group">
+        <div class="input-label">Desde</div>
+        <input type="date" class="input-field" id="report-from">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Hasta</div>
+        <input type="date" class="input-field" id="report-to">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Categoría</div>
+        <select class="input-field" id="report-category"><option value="">Todas</option></select>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Banco / Cuenta</div>
+        <select class="input-field" id="report-bank"><option value="">Todos</option></select>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Moneda</div>
+        <select class="input-field" id="report-currency">
+          <option value="">Todas</option>
+          <option value="ARS">ARS</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Estado</div>
+        <select class="input-field" id="report-status">
+          <option value="">Todos</option>
+          <option value="PAGADO">Pagado</option>
+          <option value="COBRADO">Cobrado</option>
+          <option value="A PAGAR">A Pagar</option>
+          <option value="A COBRAR">A Cobrar</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Tipo</div>
+        <select class="input-field" id="report-type">
+          <option value="">Todos</option>
+          <option value="gastos">Solo gastos</option>
+          <option value="ingresos">Solo ingresos</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Buscar</div>
+        <input type="text" class="input-field" id="report-search" placeholder="Descripción...">
+      </div>
+    </div>
+  </div>
+
+  <!-- Report results -->
+  <div id="report-results" class="fade-up d3" style="display:none;">
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px;">
+      <div class="glass-card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Total</div>
+        <div id="report-kpi-total" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+      </div>
+      <div class="glass-card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Movimientos</div>
+        <div id="report-kpi-count" style="font-size:28px;font-weight:700;margin-top:6px;">0</div>
+      </div>
+      <div class="glass-card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Promedio</div>
+        <div id="report-kpi-avg" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+      </div>
+      <div class="glass-card" style="padding:20px;">
+        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Mayor gasto</div>
+        <div id="report-kpi-max" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+      <div class="glass-card" style="padding:20px;">
+        <div class="chart-card-title">Por categoría</div>
+        <div style="height:250px;margin-top:12px;"><canvas id="report-chart-cat"></canvas></div>
+      </div>
+      <div class="glass-card" style="padding:20px;">
+        <div class="chart-card-title">Evolución en el período</div>
+        <div style="height:250px;margin-top:12px;"><canvas id="report-chart-time"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Export + Table -->
+    <div class="glass-card" style="padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="chart-card-title">Detalle de movimientos</div>
+        <button class="btn btn-glass" onclick="exportReport()" style="font-size:12px;padding:6px 14px;">↓ Exportar CSV</button>
+      </div>
+      <div id="report-table" style="max-height:500px;overflow-y:auto;"></div>
+    </div>
   </div>
 </div>
 
@@ -1720,11 +1830,6 @@ tr:hover td { background: rgba(255,255,255,0.025); }
       <div class="input-group" style="margin-bottom:14px;">
         <div class="input-label">Alerta de gasto (% del ingreso)</div>
         <input type="number" class="input-field" id="cfg-alert-pct" placeholder="ej: 85" min="1" max="100" oninput="saveConfig()">
-      </div>
-      <div class="input-group" style="margin-bottom:14px;">
-        <div class="input-label">API Key Anthropic (opcional)</div>
-        <input type="password" class="input-field" id="cfg-api-key" placeholder="sk-ant-..." oninput="saveConfig()">
-        <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px;font-family:var(--font-mono);">Para categorización IA e insights personalizados</div>
       </div>
       <div class="input-group" style="margin-bottom:14px;">
         <div class="input-label">Google Sheets URL (sincronización de gastos)</div>
@@ -2159,7 +2264,6 @@ let state = {
   income: { ars: 0, arsVar: 0, usd: 0, usdVar: 0 },
   usdRate: 1380,
   alertPct: 85,
-  apiKey: '',
   categories: [...DEFAULT_CATS],
   notes: {},
   dashMonth: null,
@@ -2310,7 +2414,6 @@ const DEFAULT_STATE = {
   income: { ars: 1549, arsVar: 400000, usd: 2549, usdVar: 300 },
   usdRate: 1431,
   alertPct: 80,
-  apiKey: '',
   categories: ["Laburo","Préstamo","Deporte","Kiosco","Compras","Regalo","Comisión","Cuentas","Personal","Transferencia","Gastronomía","Estudios","Transporte","Ropa","Suscripciones","Supermercado","Salud","Entretenimiento","Viajes","Servicios","Tecnología","Otros"],
   notes: {},
   dashMonth: null,
@@ -2410,7 +2513,8 @@ function nav(page) {
   if (page === 'cuotas') renderCuotas();
   if (page === 'compare') populateCmpSelectors();
   if (page === 'goals') renderGoals();
-  if (page === 'insights') { loadNote(); populateInsightsSelect(); }
+  if (page === 'fixed') renderFixed();
+  if (page === 'reports') initReportFilters();
   if (page === 'pending') renderPending();
   if (page === 'recurring') renderRecurring();
   if (page === 'charts') renderAdvancedCharts();
@@ -4389,96 +4493,272 @@ function renderGoals() {
   }).join('');
 }
 
+
 // ═══════════════════════════════════════════════
-//  INSIGHTS
+//  GASTOS FIJOS (Fixed Expenses Analysis)
 // ═══════════════════════════════════════════════
-function populateInsightsSelect() {
+function renderFixed() {
+  // Populate month selector
+  const sel = document.getElementById('fixed-month');
   const months = allMonths();
-  const sel = document.getElementById('insights-month-select');
-  sel.innerHTML = '<option value="">Mes actual</option>' +
-    months.map(m=>{const[y,mo]=m.split('-').map(Number);return`<option value="${m}">${MNAMES[mo-1]} ${y}</option>`;}).join('');
-  loadNote();
-}
+  const currentVal = sel.value || getActiveDashMonth();
+  sel.innerHTML = months.map(m => {
+    const [y, mo] = m.split('-');
+    const name = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mo)-1];
+    return '<option value="' + m + '"' + (m === currentVal ? ' selected' : '') + '>' + name + ' ' + y + '</option>';
+  }).join('');
+  const monthKey = sel.value || months[0];
 
-function saveNote() {
-  const sel = document.getElementById('insights-month-select');
-  const mk = sel.value || getMonthKey(new Date());
-  state.notes[mk] = document.getElementById('notes-area').value;
-  saveState();
-}
+  // Get fixed/recurring transactions for the month
+  const fixedCats = ['Cuentas', 'Suscripciones', 'Préstamo'];
+  const recurringDescs = (state.recurringExpenses || []).map(r => r.description.toUpperCase());
 
-function loadNote() {
-  const sel = document.getElementById('insights-month-select');
-  const mk = sel?.value || getMonthKey(new Date());
-  document.getElementById('notes-area').value = state.notes[mk]||'';
-}
+  const monthTxns = state.transactions.filter(t => getMonthKey(t.date) === monthKey && t.currency === 'ARS');
+  const fixedTxns = monthTxns.filter(t =>
+    fixedCats.includes(t.category) ||
+    recurringDescs.includes(t.description.toUpperCase()) ||
+    t.recurringId
+  );
 
-async function generateInsights() {
-  const sel = document.getElementById('insights-month-select');
-  const mk = sel.value || getMonthKey(new Date());
-  const [pY,pM] = mk.split('-').map(Number);
-  const monthTxns = state.transactions.filter(t=>getMonthKey(t.date)===mk);
+  const totalFixed = fixedTxns.reduce((s, t) => s + t.amount, 0);
+  const totalMonth = monthTxns.filter(t => t.status === 'PAGADO' || t.status === 'A PAGAR').reduce((s, t) => s + t.amount, 0);
+  const pct = totalMonth > 0 ? Math.round((totalFixed / totalMonth) * 100) : 0;
 
-  if (!monthTxns.length) { showToast('Sin movimientos en este período','error'); return; }
+  // KPIs
+  document.getElementById('fixed-kpi-total').textContent = '$' + fmtN(totalFixed);
+  document.getElementById('fixed-kpi-pct').textContent = pct + '% del gasto total';
+  document.getElementById('fixed-kpi-count').textContent = fixedTxns.length;
+  document.getElementById('fixed-kpi-avg').textContent = fixedTxns.length > 0 ? '$' + fmtN(totalFixed / fixedTxns.length) : '$0';
 
-  const loading = document.getElementById('insights-loading');
-  const feed = document.getElementById('insights-feed');
-  loading.style.display='block'; feed.innerHTML='';
+  // vs previous month
+  const [y, m] = monthKey.split('-').map(Number);
+  const prevMonth = (m === 1 ? (y-1) + '-12' : y + '-' + String(m-1).padStart(2, '0'));
+  const prevTxns = state.transactions.filter(t => getMonthKey(t.date) === prevMonth && t.currency === 'ARS');
+  const prevFixed = prevTxns.filter(t =>
+    fixedCats.includes(t.category) ||
+    recurringDescs.includes(t.description.toUpperCase()) ||
+    t.recurringId
+  );
+  const prevTotal = prevFixed.reduce((s, t) => s + t.amount, 0);
 
-  const arsTotal = monthTxns.filter(t=>t.currency==='ARS').reduce((s,t)=>s+t.amount,0);
-  const usdTotal = monthTxns.filter(t=>t.currency==='USD').reduce((s,t)=>s+t.amount,0);
-  const byCat = {};
-  monthTxns.filter(t=>t.currency==='ARS').forEach(t=>{byCat[t.category||'Otros']=(byCat[t.category||'Otros']||0)+t.amount;});
-  const incTotal = state.income.ars+state.income.arsVar+(state.income.usd+state.income.usdVar)*state.usdRate;
-
-  const summary = { mes:`${MNAMES[pM-1]} ${pY}`, totalARS:arsTotal, totalUSD:usdTotal, categorias:byCat, ingreso:incTotal, movimientos:monthTxns.length };
-
-  let items;
-  if (state.apiKey) {
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json','x-api-key':state.apiKey,'anthropic-version':'2023-06-01' },
-        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1500,
-          messages:[{role:'user',content:`Sos asesor financiero de finanzas personales argentinas. Analizá estos datos de ${summary.mes} y generá exactamente 5 insights accionables en español rioplatense informal.\n\nDatos: ${JSON.stringify(summary)}\n\nResponde SOLO este JSON (sin backticks):\n[{"emoji":"X","type":"good|warn|info|bad","label":"TITULO","headline":"Una oración directa con el dato","body":"2-3 oraciones de contexto y acción concreta"}]`}]
-        })
-      });
-      const d = await r.json();
-      items = JSON.parse((d.content?.[0]?.text||'[]').replace(/```json|```/g,'').trim());
-    } catch(e) { items = fallbackInsights(summary); }
+  if (prevTotal > 0) {
+    const diff = totalFixed - prevTotal;
+    const diffPct = Math.round((diff / prevTotal) * 100);
+    const color = diff > 0 ? '#ef4444' : '#22c55e';
+    const arrow = diff > 0 ? '↑' : '↓';
+    document.getElementById('fixed-kpi-vs').innerHTML = '<span style="color:' + color + '">' + arrow + ' ' + Math.abs(diffPct) + '%</span>';
+    document.getElementById('fixed-kpi-vs-sub').textContent = (diff > 0 ? '+' : '-') + '$' + fmtN(Math.abs(diff));
   } else {
-    items = fallbackInsights(summary);
+    document.getElementById('fixed-kpi-vs').textContent = '—';
+    document.getElementById('fixed-kpi-vs-sub').textContent = 'sin datos previos';
   }
 
-  loading.style.display='none';
-  feed.innerHTML = items.map(item => `
-    <div class="insight-card ${item.type||'info'}">
-      <div class="insight-emoji">${item.emoji}</div>
-      <div>
-        <div class="insight-label ${item.type||'info'}">${esc(item.label)}</div>
-        <div class="insight-headline">${esc(item.headline)}</div>
-        <div class="insight-body">${item.body}</div>
-      </div>
-    </div>`).join('');
+  // By category
+  const byCat = {};
+  fixedTxns.forEach(t => {
+    byCat[t.category] = (byCat[t.category] || 0) + t.amount;
+  });
+  const sortedCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  document.getElementById('fixed-by-cat').innerHTML = sortedCats.length ? sortedCats.map(([cat, amount]) => {
+    const catPct = totalFixed > 0 ? Math.round((amount / totalFixed) * 100) : 0;
+    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+      '<div style="width:10px;height:10px;border-radius:50%;background:' + catColor(cat) + ';flex-shrink:0;"></div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">' +
+          '<span style="font-size:13px;">' + esc(cat) + '</span>' +
+          '<span style="font-size:13px;font-weight:600;">$' + fmtN(amount) + '</span>' +
+        '</div>' +
+        '<div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">' +
+          '<div style="height:100%;width:' + catPct + '%;background:' + catColor(cat) + ';border-radius:3px;"></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('') : '<div style="color:var(--text-secondary);font-size:13px;">Sin gastos fijos este mes</div>';
+
+  // Detail list
+  document.getElementById('fixed-detail-list').innerHTML = fixedTxns.length ? fixedTxns
+    .sort((a, b) => b.amount - a.amount)
+    .map(t =>
+      '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);">' +
+        '<div style="width:8px;height:8px;border-radius:50%;background:' + catColor(t.category) + ';flex-shrink:0;"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(t.description) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-tertiary);">' + esc(t.category) + (t.bank ? ' · ' + esc(t.bank) : '') + '</div>' +
+        '</div>' +
+        '<div style="font-size:14px;font-weight:600;white-space:nowrap;">$' + fmtN(t.amount) + '</div>' +
+      '</div>'
+    ).join('') : '<div style="color:var(--text-secondary);font-size:13px;">Sin gastos fijos este mes</div>';
+
+  document.getElementById('fixed-subtitle').textContent = fixedTxns.length + ' gastos fijos · $' + fmtN(totalFixed);
 }
 
-function renderInsights() { loadNote(); }
+// ═══════════════════════════════════════════════
+//  REPORTES
+// ═══════════════════════════════════════════════
+let reportChartCat = null, reportChartTime = null;
+let _reportTxns = [];
 
-function fallbackInsights(summary) {
-  const items = [];
-  const cats = Object.entries(summary.categorias||{}).sort((a,b)=>b[1]-a[1]);
-  const topCat = cats[0];
-  const pct = summary.ingreso>0?Math.round(summary.totalARS/summary.ingreso*100):null;
-
-  if (topCat) items.push({emoji:'🔥',type:'warn',label:'MAYOR CATEGORÍA',headline:`${topCat[0]} fue tu mayor gasto: $${fmtN(topCat[1])}`,body:`Representa el ${Math.round(topCat[1]/summary.totalARS*100)}% de tus gastos de ARS. Revisá si hay oportunidad de reducir en esta categoría.`});
-  if (pct!==null) {
-    const type = pct>=100?'bad':pct>=85?'warn':'good';
-    items.push({emoji:pct>=100?'🚨':pct>=85?'⚠️':'✅',type,label:pct>=100?'PRESUPUESTO SUPERADO':pct>=85?'ALERTA DE GASTO':'BUEN CONTROL',headline:`Gastaste el ${pct}% de tus ingresos en ${summary.mes}`,body:pct>=100?`Superaste tu ingreso mensual por $${fmtN(summary.totalARS-summary.ingreso)}. Revisá qué categorías te generaron el exceso.`:pct>=85?`Estás cerca del límite. Te quedan $${fmtN(summary.ingreso-summary.totalARS)} para el resto del mes.`:`Excelente control financiero. Ahorraste $${fmtN(summary.ingreso-summary.totalARS)} este mes.`});
+function initReportFilters() {
+  // Set default dates (current month)
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (!document.getElementById('report-from').value) {
+    document.getElementById('report-from').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('report-to').value = now.toISOString().split('T')[0];
   }
-  if (cats.length>1) items.push({emoji:'📊',type:'info',label:'DISTRIBUCIÓN',headline:`Tus gastos se distribuyen en ${cats.length} categorías`,body:`Las 3 principales son: ${cats.slice(0,3).map(c=>c[0]).join(', ')}. Diversificar el gasto es saludable, pero asegurate de que los gastos esenciales no superen el 50%.`});
-  if (summary.totalUSD>0) items.push({emoji:'💵',type:'info',label:'GASTOS EN USD',headline:`Tuviste U$D ${fmtN(summary.totalUSD)} en gastos dolarizados`,body:`Equivalen a $${fmtN(summary.totalUSD*state.usdRate)} al tipo de cambio actual ($${fmtN(state.usdRate)}/USD). Monitoreá estos gastos frente a la variación del dólar.`});
-  items.push({emoji:'💡',type:'info',label:'CONSEJO',headline:'Activá la API de Anthropic para insights personalizados',body:'Con tu API key en Configuración, los insights se generan con IA real analizando exactamente tu situación financiera con contexto argentino.'});
-  return items;
+
+  // Populate category filter
+  const catSel = document.getElementById('report-category');
+  const currentCat = catSel.value;
+  catSel.innerHTML = '<option value="">Todas</option>' + (state.categories || []).map(c => '<option value="' + c + '"' + (c === currentCat ? ' selected' : '') + '>' + c + '</option>').join('');
+
+  // Populate bank filter
+  const bankSel = document.getElementById('report-bank');
+  const currentBank = bankSel.value;
+  const banks = [...new Set(state.transactions.map(t => t.bank).filter(Boolean))].sort();
+  bankSel.innerHTML = '<option value="">Todos</option>' + banks.map(b => '<option value="' + b + '"' + (b === currentBank ? ' selected' : '') + '>' + b + '</option>').join('');
+}
+
+function generateReport() {
+  const from = new Date(document.getElementById('report-from').value);
+  const to = new Date(document.getElementById('report-to').value);
+  to.setHours(23, 59, 59);
+  const cat = document.getElementById('report-category').value;
+  const bank = document.getElementById('report-bank').value;
+  const currency = document.getElementById('report-currency').value;
+  const status = document.getElementById('report-status').value;
+  const type = document.getElementById('report-type').value;
+  const search = document.getElementById('report-search').value.toLowerCase().trim();
+
+  if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+    showToast('Seleccioná un período válido', 'error');
+    return;
+  }
+
+  let txns = state.transactions.filter(t => {
+    const d = t.date instanceof Date ? t.date : new Date(t.date);
+    if (d < from || d > to) return false;
+    if (cat && t.category !== cat) return false;
+    if (bank && t.bank !== bank) return false;
+    if (currency && t.currency !== currency) return false;
+    if (status && t.status !== status) return false;
+    if (type === 'gastos' && t.status === 'COBRADO') return false;
+    if (type === 'ingresos' && t.status !== 'COBRADO') return false;
+    if (search && !t.description.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  _reportTxns = txns;
+
+  if (!txns.length) {
+    showToast('No se encontraron movimientos con esos filtros', 'error');
+    document.getElementById('report-results').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('report-results').style.display = '';
+
+  // KPIs
+  const total = txns.reduce((s, t) => s + t.amount, 0);
+  const maxTxn = txns.reduce((max, t) => t.amount > max.amount ? t : max, txns[0]);
+  document.getElementById('report-kpi-total').textContent = '$' + fmtN(total);
+  document.getElementById('report-kpi-count').textContent = txns.length;
+  document.getElementById('report-kpi-avg').textContent = '$' + fmtN(total / txns.length);
+  document.getElementById('report-kpi-max').textContent = '$' + fmtN(maxTxn.amount);
+
+  // Chart: by category
+  const byCat = {};
+  txns.forEach(t => { byCat[t.category] = (byCat[t.category] || 0) + t.amount; });
+  const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+
+  if (reportChartCat) reportChartCat.destroy();
+  const ctxCat = document.getElementById('report-chart-cat');
+  if (ctxCat) {
+    reportChartCat = new Chart(ctxCat, {
+      type: 'doughnut',
+      data: {
+        labels: catEntries.map(e => e[0]),
+        datasets: [{ data: catEntries.map(e => e[1]), backgroundColor: catEntries.map(e => catColor(e[0])), borderWidth: 0 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { color: '#999', padding: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: function(ctx) { return ctx.label + ': $' + fmtN(ctx.raw); } } } }
+      }
+    });
+  }
+
+  // Chart: timeline
+  const byMonth = {};
+  txns.forEach(t => {
+    const mk = getMonthKey(t.date);
+    byMonth[mk] = (byMonth[mk] || 0) + t.amount;
+  });
+  const timeLabels = Object.keys(byMonth).sort();
+  const timeData = timeLabels.map(k => byMonth[k]);
+
+  if (reportChartTime) reportChartTime.destroy();
+  const ctxTime = document.getElementById('report-chart-time');
+  if (ctxTime) {
+    reportChartTime = new Chart(ctxTime, {
+      type: 'bar',
+      data: {
+        labels: timeLabels.map(function(l) { var p = l.split('-'); return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(p[1])-1] + ' ' + p[0].slice(2); }),
+        datasets: [{ data: timeData, backgroundColor: 'rgba(59,130,246,0.6)', borderRadius: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return '$' + fmtN(ctx.raw); } } } },
+        scales: {
+          y: { ticks: { color: '#999', callback: function(v) { return '$' + fmtN(v); } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          x: { ticks: { color: '#999' }, grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // Table
+  var sortedTxns = txns.sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
+  document.getElementById('report-table').innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+    '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">' +
+    '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Fecha</th>' +
+    '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Descripción</th>' +
+    '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Categoría</th>' +
+    '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Banco</th>' +
+    '<th style="text-align:right;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Monto</th>' +
+    '</tr></thead><tbody>' +
+    sortedTxns.map(function(t) {
+      var d = t.date instanceof Date ? t.date : new Date(t.date);
+      return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">' +
+        '<td style="padding:8px 4px;white-space:nowrap;">' + d.toLocaleDateString('es-AR') + '</td>' +
+        '<td style="padding:8px 4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(t.description) + '</td>' +
+        '<td style="padding:8px 4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + catColor(t.category) + ';margin-right:6px;vertical-align:middle;"></span>' + esc(t.category) + '</td>' +
+        '<td style="padding:8px 4px;color:var(--text-secondary);">' + esc(t.bank || '—') + '</td>' +
+        '<td style="padding:8px 4px;text-align:right;font-weight:600;">' + fmtM(t.amount, t.currency) + '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+
+  showToast(txns.length + ' movimientos encontrados');
+}
+
+function exportReport() {
+  if (!_reportTxns.length) { showToast('No hay datos para exportar', 'error'); return; }
+  var csv = 'Fecha,Descripcion,Monto,Moneda,Categoria,Banco,Estado\n';
+  _reportTxns.forEach(function(t) {
+    var d = t.date instanceof Date ? t.date : new Date(t.date);
+    csv += d.toISOString().split('T')[0] + ',' +
+      '"' + (t.description || '').replace(/"/g, '""') + '",' +
+      t.amount + ',' +
+      t.currency + ',' +
+      '"' + (t.category || '') + '",' +
+      '"' + (t.bank || '') + '",' +
+      t.status + '\n';
+  });
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'reporte_' + document.getElementById('report-from').value + '_' + document.getElementById('report-to').value + '.csv';
+  a.click();
 }
 
 // ═══════════════════════════════════════════════
@@ -4491,7 +4771,6 @@ function saveConfig() {
   state.income.usdVar = parseFloat(document.getElementById('cfg-income-usd-var').value)||0;
   state.usdRate = parseFloat(document.getElementById('cfg-usd-rate').value)||1380;
   state.alertPct = parseInt(document.getElementById('cfg-alert-pct').value)||85;
-  state.apiKey = document.getElementById('cfg-api-key').value.trim();
   state.gsheetsUrl = document.getElementById('cfg-gsheets-url').value.trim();
   saveState();
 }
@@ -4503,7 +4782,6 @@ function renderSettings() {
   document.getElementById('cfg-income-usd-var').value = state.income.usdVar||'';
   document.getElementById('cfg-usd-rate').value = state.usdRate||1380;
   document.getElementById('cfg-alert-pct').value = state.alertPct||85;
-  document.getElementById('cfg-api-key').value = state.apiKey||'';
   document.getElementById('cfg-gsheets-url').value = state.gsheetsUrl||'';
 
   // TC list
@@ -5309,7 +5587,8 @@ function installApp() {
     <button class="mobile-nav-btn" data-page="compare" onclick="mobileNav('compare')"><span>⇄</span>Comparar</button>
     <button class="mobile-nav-btn" data-page="goals" onclick="mobileNav('goals')"><span>◎</span>Metas</button>
     <button class="mobile-nav-btn" data-page="pending" onclick="mobileNav('pending')"><span>🔔</span>Pendientes</button>
-    <button class="mobile-nav-btn" data-page="insights" onclick="mobileNav('insights')"><span>◈</span>Insights</button>
+    <button class="mobile-nav-btn" data-page="fixed" onclick="mobileNav('fixed')"><span>📌</span>Fijos</button>
+    <button class="mobile-nav-btn" data-page="reports" onclick="mobileNav('reports')"><span>📋</span>Reportes</button>
     <button class="mobile-nav-btn" data-page="recurring" onclick="mobileNav('recurring')"><span>🔄</span>Recurrentes</button>
     <button class="mobile-nav-btn" data-page="charts" onclick="mobileNav('charts')"><span>📈</span>Gráficos</button>
     <button class="mobile-nav-btn" data-page="settings" onclick="mobileNav('settings')"><span>⚙</span>Config</button>
