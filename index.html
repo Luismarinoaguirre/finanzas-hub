@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Finanzas · Hub</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3B82F6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -939,6 +944,8 @@ tr:hover td { background: rgba(255,255,255,0.025); }
 .mobile-nav-btn.active { color: var(--blue-light); }
 .mobile-nav-btn:active { background: var(--bg-surface); }
 
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
 @media (max-width: 768px) {
   .app-layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
@@ -950,6 +957,7 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   .tc-total-banner { flex-direction: column; }
   .cmp-hero { grid-template-columns: 1fr; }
   .cmp-vs { display: none; }
+  #charts-advanced-grid { grid-template-columns: 1fr !important; }
 }
 
 /* Select months dropdown */
@@ -1015,6 +1023,9 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   <button class="nav-item" id="ni-insights" onclick="nav('insights')">
     <span class="nav-icon">◈</span> Insights IA
   </button>
+  <button class="nav-item" id="ni-charts" onclick="nav('charts')">
+    <span class="nav-icon">📈</span> Gráficos
+  </button>
   <button class="nav-item" id="ni-pending" onclick="nav('pending')">
     <span class="nav-icon">🔔</span> Pendientes <span id="pending-badge" class="pending-badge" style="display:none">0</span>
   </button>
@@ -1022,6 +1033,9 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   <div class="nav-section-label" style="margin-top:8px;">Config</div>
   <button class="nav-item" id="ni-new-txn" onclick="openNewTxn()">
     <span class="nav-icon">＋</span> Cargar gasto
+  </button>
+  <button class="nav-item" id="ni-recurring" onclick="nav('recurring')">
+    <span class="nav-icon">🔄</span> Recurrentes
   </button>
   <button class="nav-item" id="ni-settings" onclick="nav('settings')">
     <span class="nav-icon">⚙</span> Configuración
@@ -1157,6 +1171,13 @@ tr:hover td { background: rgba(255,255,255,0.025); }
         <div class="chart-card-sub">Distribución de gastos</div>
         <div class="cat-bars-list" id="cat-bars"></div>
       </div>
+    </div>
+
+    <!-- Budget progress -->
+    <div class="glass-card fade-up d4" id="budget-section" style="display:none;padding:20px;margin-bottom:20px;">
+      <div class="chart-card-title">Presupuestos del mes</div>
+      <div class="chart-card-sub" style="margin-bottom:14px;">Progreso por categoría</div>
+      <div id="budget-bars" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
 
     <!-- Top 5 -->
@@ -1594,6 +1615,71 @@ tr:hover td { background: rgba(255,255,255,0.025); }
 </div>
 
 <!-- ══════════════════════════
+     RECURRENTES
+══════════════════════════ -->
+<div id="page-recurring" class="page">
+  <div class="page-header fade-up">
+    <div>
+      <div class="page-title">Gastos Recurrentes</div>
+      <div class="page-subtitle">Gastos fijos que se cargan automáticamente cada mes</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" onclick="openRecurringModal()">＋ Nuevo</button>
+    </div>
+  </div>
+  <div class="glass-card fade-up d2" style="padding:20px;margin-bottom:20px;">
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Total mensual</div><div id="rec-total" style="font-size:28px;font-weight:700;margin-top:4px;">$0</div></div>
+      <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Activos</div><div id="rec-active" style="font-size:28px;font-weight:700;margin-top:4px;">0</div></div>
+    </div>
+  </div>
+  <div id="recurring-list" class="fade-up d3"></div>
+</div>
+
+<!-- ══════════════════════════
+     GRÁFICOS AVANZADOS
+══════════════════════════ -->
+<div id="page-charts" class="page">
+  <div class="page-header fade-up">
+    <div>
+      <div class="page-title">Gráficos Avanzados</div>
+      <div class="page-subtitle">Análisis visual de tus finanzas</div>
+    </div>
+    <div class="page-actions">
+      <select id="chart-period" class="filter-select" onchange="renderAdvancedCharts()" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border);padding:8px 12px;border-radius:8px;">
+        <option value="3">Últimos 3 meses</option>
+        <option value="6" selected>Últimos 6 meses</option>
+        <option value="12">Últimos 12 meses</option>
+        <option value="ytd">Año actual</option>
+        <option value="all">Todo</option>
+      </select>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="fade-up d2" id="charts-advanced-grid">
+    <div class="glass-card" style="padding:20px;">
+      <div class="chart-card-title">Tendencia anual</div>
+      <div class="chart-card-sub">Gasto total por mes</div>
+      <div style="height:280px;margin-top:12px;"><canvas id="chart-annual"></canvas></div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+      <div class="chart-card-title">Cashflow</div>
+      <div class="chart-card-sub">Ingresos vs Egresos por mes</div>
+      <div style="height:280px;margin-top:12px;"><canvas id="chart-cashflow"></canvas></div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+      <div class="chart-card-title">Mapa de calor</div>
+      <div class="chart-card-sub">Intensidad de gasto diario</div>
+      <div id="heatmap-container" style="margin-top:12px;overflow-x:auto;"></div>
+    </div>
+    <div class="glass-card" style="padding:20px;">
+      <div class="chart-card-title">Top comercios</div>
+      <div class="chart-card-sub">Ranking por monto total gastado</div>
+      <div style="height:300px;margin-top:12px;"><canvas id="chart-merchants"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════
      SETTINGS
 ══════════════════════════ -->
 <div id="page-settings" class="page">
@@ -1663,6 +1749,14 @@ tr:hover td { background: rgba(255,255,255,0.025); }
     </div>
   </div>
 
+  <!-- Budget settings -->
+  <div class="glass-card fade-up d5" style="padding:24px;margin-top:20px;">
+    <div class="chart-card-title">Presupuestos mensuales</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin:6px 0 16px;">Definí un límite de gasto mensual por categoría (en ARS)</div>
+    <div id="budget-settings-list"></div>
+    <button class="btn btn-primary" onclick="saveBudgets()" style="margin-top:12px;">Guardar presupuestos</button>
+  </div>
+
   <div class="glass-card fade-up d4" style="padding:24px;">
     <div class="chart-card-title" style="margin-bottom:8px;">Datos</div>
     <div style="font-size:12px;color:var(--text-tertiary);font-family:var(--font-mono);margin-bottom:16px;">Todos los datos se guardan localmente en tu navegador.</div>
@@ -1671,6 +1765,13 @@ tr:hover td { background: rgba(255,255,255,0.025); }
       <button class="btn btn-glass" onclick="importAllData()">↑ Importar backup</button>
       <button class="btn btn-danger" onclick="confirmClearData()">🗑 Borrar todos los datos</button>
     </div>
+  </div>
+
+  <!-- PWA Install -->
+  <div class="glass-card fade-up" id="pwa-install-card" style="display:none;padding:24px;margin-top:20px;">
+    <div class="chart-card-title">Instalar App</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin:6px 0 16px;">Instalá Finanzas Hub en tu dispositivo para acceso rápido y uso offline.</div>
+    <button class="btn btn-primary" onclick="installApp()">📱 Instalar en dispositivo</button>
   </div>
 </div>
 
@@ -1908,6 +2009,63 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   </div>
 </div>
 
+<!-- ═══ RECURRING MODAL ═══ -->
+<div class="modal-overlay" id="modal-recurring">
+  <div class="modal">
+    <div class="modal-title" id="recurring-modal-title">Nuevo gasto recurrente</div>
+    <div class="modal-sub">Se cargará automáticamente cada mes</div>
+    <div class="modal-form">
+      <input type="hidden" id="rec-edit-id">
+      <div class="input-group">
+        <div class="input-label">Descripción</div>
+        <input type="text" class="input-field" id="rec-description" placeholder="Ej: Netflix, Gym, Alquiler">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="input-group">
+          <div class="input-label">Monto</div>
+          <input type="number" class="input-field" id="rec-amount" placeholder="0">
+        </div>
+        <div class="input-group">
+          <div class="input-label">Moneda</div>
+          <select class="input-field" id="rec-currency"><option value="ARS">ARS</option><option value="USD">USD</option></select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="input-group">
+          <div class="input-label">Categoría</div>
+          <select class="input-field" id="rec-category"></select>
+        </div>
+        <div class="input-group">
+          <div class="input-label">Banco / Cuenta</div>
+          <input type="text" class="input-field" id="rec-bank" placeholder="Ej: BRUBANK">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="input-group">
+          <div class="input-label">Frecuencia</div>
+          <select class="input-field" id="rec-frequency">
+            <option value="monthly">Mensual</option>
+            <option value="weekly">Semanal</option>
+            <option value="biweekly">Quincenal</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <div class="input-label">Día del mes</div>
+          <input type="number" class="input-field" id="rec-day" min="1" max="31" value="1">
+        </div>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Tarjeta de crédito (opcional)</div>
+        <select class="input-field" id="rec-card"><option value="">Sin tarjeta (débito/efectivo)</option></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-glass" onclick="closeModal('modal-recurring')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveRecurring()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Hidden file inputs -->
 <input type="file" id="csvInput" accept=".csv,.xlsx,.xls,.numbers,.pdf" multiple style="display:none" onchange="handleFileUpload(event)">
 <input type="file" id="jsonInput" accept=".json" style="display:none" onchange="handleJSONImport(event)">
@@ -2007,6 +2165,9 @@ let state = {
   dashMonth: null,
   gsheetsUrl: '',
   processedSheetRows: [],
+  recurringExpenses: [],
+  recurringGenerated: {},
+  budgets: {},
 };
 
 let chartWeekly = null, chartCompare = null;
@@ -2155,6 +2316,9 @@ const DEFAULT_STATE = {
   dashMonth: null,
   gsheetsUrl: '',
   processedSheetRows: [],
+  recurringExpenses: [],
+  recurringGenerated: {},
+  budgets: {},
 };
 
 function loadState() {
@@ -2195,6 +2359,9 @@ function loadState() {
     state = { ...DEFAULT_STATE };
     state.transactions = DEFAULT_STATE.transactions;
   }
+  state.recurringExpenses = state.recurringExpenses || [];
+  state.recurringGenerated = state.recurringGenerated || {};
+  state.budgets = state.budgets || {};
 }
 
 // ═══════════════════════════════════════════════
@@ -2245,6 +2412,8 @@ function nav(page) {
   if (page === 'goals') renderGoals();
   if (page === 'insights') { loadNote(); populateInsightsSelect(); }
   if (page === 'pending') renderPending();
+  if (page === 'recurring') renderRecurring();
+  if (page === 'charts') renderAdvancedCharts();
   if (page === 'settings') renderSettings();
   updateMobileNav(page);
 }
@@ -3578,6 +3747,8 @@ function renderDashboard() {
 
   renderWeeklyChart(monthTxns);
   renderCatBars(monthTxns);
+  renderBudgetBars(monthTxns);
+  checkBudgetAlerts(monthTxns);
   renderTop5(monthTxns);
   updateSidebarBalance();
 }
@@ -4352,6 +4523,7 @@ function renderSettings() {
       ${esc(c)}
       <button onclick="removeCat(${i})" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.6;font-size:13px;padding:0;line-height:1;">×</button>
     </span>`).join('');
+  renderBudgetSettings();
 }
 
 function addCat() {
@@ -4663,11 +4835,433 @@ function updateMobileNav(page) {
   });
 }
 
+// ═══════════════════════════════════════════════
+//  RECURRING EXPENSES
+// ═══════════════════════════════════════════════
+function renderRecurring() {
+  const list = document.getElementById('recurring-list');
+  const recs = state.recurringExpenses || [];
+  const activeRecs = recs.filter(r => r.active);
+  const totalMonthly = activeRecs.filter(r => r.currency === 'ARS').reduce((s, r) => s + r.amount, 0);
+  document.getElementById('rec-total').textContent = '$' + fmtN(totalMonthly);
+  document.getElementById('rec-active').textContent = activeRecs.length;
+
+  if (!recs.length) {
+    list.innerHTML = '<div class="glass-card" style="padding:40px;text-align:center;"><div style="font-size:40px;margin-bottom:12px;">🔄</div><div style="font-size:16px;font-weight:600;margin-bottom:6px;">No hay gastos recurrentes</div><div style="font-size:13px;color:var(--text-secondary);">Agregá tus gastos fijos como Netflix, gym o alquiler para que se carguen automáticamente cada mes.</div></div>';
+    return;
+  }
+
+  list.innerHTML = recs.map(r => `
+    <div class="glass-card" style="padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:16px;opacity:${r.active ? 1 : 0.5};">
+      <div style="width:8px;height:40px;border-radius:4px;background:${catColor(r.category)};flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:14px;">${esc(r.description)}</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${esc(r.category)} · ${esc(r.bank || '—')} · ${r.frequency === 'monthly' ? 'Día ' + r.dayOfMonth : r.frequency === 'weekly' ? 'Semanal' : 'Quincenal'}</div>
+      </div>
+      <div style="font-size:18px;font-weight:700;white-space:nowrap;">${fmtM(r.amount, r.currency)}</div>
+      <label style="position:relative;width:44px;height:24px;flex-shrink:0;cursor:pointer;">
+        <input type="checkbox" ${r.active ? 'checked' : ''} onchange="toggleRecurring('${r.id}')" style="opacity:0;width:0;height:0;position:absolute;">
+        <span style="position:absolute;inset:0;background:${r.active ? 'var(--blue)' : 'rgba(255,255,255,0.1)'};border-radius:12px;transition:.3s;"></span>
+        <span style="position:absolute;top:2px;left:${r.active ? '22px' : '2px'};width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;"></span>
+      </label>
+      <button onclick="openRecurringModal('${r.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:16px;padding:4px 8px;">✏️</button>
+      <button onclick="deleteRecurring('${r.id}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:4px 8px;">🗑</button>
+    </div>
+  `).join('');
+}
+
+function openRecurringModal(id) {
+  const catSel = document.getElementById('rec-category');
+  catSel.innerHTML = (state.categories || []).map(c => `<option value="${c}">${c}</option>`).join('');
+  const cardSel = document.getElementById('rec-card');
+  cardSel.innerHTML = '<option value="">Sin tarjeta (débito/efectivo)</option>' + (state.creditCards || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  if (id) {
+    const r = (state.recurringExpenses || []).find(x => x.id === id);
+    if (!r) return;
+    document.getElementById('rec-edit-id').value = r.id;
+    document.getElementById('rec-description').value = r.description;
+    document.getElementById('rec-amount').value = r.amount;
+    document.getElementById('rec-currency').value = r.currency;
+    document.getElementById('rec-category').value = r.category;
+    document.getElementById('rec-bank').value = r.bank || '';
+    document.getElementById('rec-frequency').value = r.frequency;
+    document.getElementById('rec-day').value = r.dayOfMonth;
+    document.getElementById('rec-card').value = r.tcId || '';
+    document.getElementById('recurring-modal-title').textContent = 'Editar recurrente';
+  } else {
+    document.getElementById('rec-edit-id').value = '';
+    document.getElementById('rec-description').value = '';
+    document.getElementById('rec-amount').value = '';
+    document.getElementById('rec-currency').value = 'ARS';
+    document.getElementById('rec-category').value = state.categories[0] || '';
+    document.getElementById('rec-bank').value = '';
+    document.getElementById('rec-frequency').value = 'monthly';
+    document.getElementById('rec-day').value = '1';
+    document.getElementById('rec-card').value = '';
+    document.getElementById('recurring-modal-title').textContent = 'Nuevo gasto recurrente';
+  }
+  openModal('modal-recurring');
+}
+
+function saveRecurring() {
+  const desc = document.getElementById('rec-description').value.trim();
+  const amount = parseFloat(document.getElementById('rec-amount').value);
+  if (!desc || !amount) { showToast('Completá descripción y monto', 'error'); return; }
+
+  const editId = document.getElementById('rec-edit-id').value;
+  const tcId = document.getElementById('rec-card').value;
+  const obj = {
+    id: editId || uid(),
+    description: desc,
+    amount: amount,
+    currency: document.getElementById('rec-currency').value,
+    category: document.getElementById('rec-category').value,
+    bank: document.getElementById('rec-bank').value.trim(),
+    tcId: tcId,
+    frequency: document.getElementById('rec-frequency').value,
+    dayOfMonth: parseInt(document.getElementById('rec-day').value) || 1,
+    active: true,
+    source: tcId ? 'tc' : 'cuenta'
+  };
+
+  if (!state.recurringExpenses) state.recurringExpenses = [];
+  if (editId) {
+    const idx = state.recurringExpenses.findIndex(r => r.id === editId);
+    if (idx >= 0) { obj.active = state.recurringExpenses[idx].active; state.recurringExpenses[idx] = obj; }
+  } else {
+    state.recurringExpenses.push(obj);
+  }
+  saveState(); closeModal('modal-recurring'); renderRecurring();
+  showToast(editId ? 'Recurrente actualizado' : 'Recurrente creado');
+}
+
+function deleteRecurring(id) {
+  if (!confirm('¿Eliminar este gasto recurrente?')) return;
+  state.recurringExpenses = (state.recurringExpenses || []).filter(r => r.id !== id);
+  saveState(); renderRecurring();
+  showToast('Recurrente eliminado');
+}
+
+function toggleRecurring(id) {
+  const r = (state.recurringExpenses || []).find(x => x.id === id);
+  if (r) { r.active = !r.active; saveState(); renderRecurring(); }
+}
+
+function generateRecurringTransactions(monthKey) {
+  if (!state.recurringExpenses || !state.recurringExpenses.length) return;
+  if (!state.recurringGenerated) state.recurringGenerated = {};
+  let generated = 0;
+  state.recurringExpenses.filter(r => r.active).forEach(r => {
+    if (r.frequency !== 'monthly') return;
+    const key = monthKey + '_' + r.id;
+    if (state.recurringGenerated[key]) return;
+    const [y, m] = monthKey.split('-').map(Number);
+    const day = Math.min(r.dayOfMonth, new Date(y, m, 0).getDate());
+    const date = new Date(y, m - 1, day);
+    state.transactions.push({
+      id: uid(), date: date, description: r.description, amount: r.amount,
+      currency: r.currency, category: r.category, status: 'PAGADO',
+      bank: r.bank, tcId: r.tcId, empresa: '', cuotaNum: null, cuotaTotal: null,
+      month: monthKey, week: '', source: r.source, recurringId: r.id
+    });
+    state.recurringGenerated[key] = true;
+    generated++;
+  });
+  if (generated > 0) {
+    saveState();
+    showToast(generated + ' gasto(s) recurrente(s) generado(s)');
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  BUDGETS
+// ═══════════════════════════════════════════════
+let _budgetAlertsShown = new Set();
+
+function renderBudgetBars(monthTxns) {
+  const section = document.getElementById('budget-section');
+  if (!section) return;
+  const budgets = state.budgets || {};
+  const cats = Object.keys(budgets).filter(c => budgets[c] > 0);
+  if (!cats.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const spent = {};
+  monthTxns.filter(t => t.currency === 'ARS' && (t.status === 'PAGADO' || t.status === 'A PAGAR')).forEach(t => {
+    spent[t.category] = (spent[t.category] || 0) + t.amount;
+  });
+
+  const rows = cats.map(cat => {
+    const limit = budgets[cat];
+    const used = spent[cat] || 0;
+    const pct = Math.round((used / limit) * 100);
+    const color = pct > 100 ? '#dc2626' : pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#22c55e';
+    const pulse = pct > 100 ? 'animation:pulse 1.5s infinite;' : '';
+    return `<div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:10px;height:10px;border-radius:50%;background:${catColor(cat)};flex-shrink:0;"></div>
+      <div style="width:110px;font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(cat)}</div>
+      <div style="flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(pct, 100)}%;background:${color};border-radius:4px;transition:width .5s;${pulse}"></div>
+      </div>
+      <div style="font-size:12px;color:${color};font-weight:600;min-width:45px;text-align:right;">${pct}%</div>
+      <div style="font-size:11px;color:var(--text-tertiary);min-width:120px;text-align:right;">$${fmtN(used)} / $${fmtN(limit)}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('budget-bars').innerHTML = rows;
+}
+
+function checkBudgetAlerts(monthTxns) {
+  const budgets = state.budgets || {};
+  const spent = {};
+  monthTxns.filter(t => t.currency === 'ARS' && (t.status === 'PAGADO' || t.status === 'A PAGAR')).forEach(t => {
+    spent[t.category] = (spent[t.category] || 0) + t.amount;
+  });
+  Object.keys(budgets).forEach(cat => {
+    const limit = budgets[cat];
+    if (!limit) return;
+    const used = spent[cat] || 0;
+    const pct = (used / limit) * 100;
+    const key = getActiveDashMonth() + '_' + cat;
+    if (pct >= 90 && !_budgetAlertsShown.has(key)) {
+      _budgetAlertsShown.add(key);
+      showToast(`⚠️ ${cat}: ${Math.round(pct)}% del presupuesto usado`, pct > 100 ? 'error' : 'warning');
+    }
+  });
+}
+
+function renderBudgetSettings() {
+  const container = document.getElementById('budget-settings-list');
+  if (!container) return;
+  const budgets = state.budgets || {};
+  container.innerHTML = (state.categories || []).map(cat =>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <div style="width:10px;height:10px;border-radius:50%;background:${catColor(cat)};flex-shrink:0;"></div>
+      <div style="width:130px;font-size:13px;">${esc(cat)}</div>
+      <input type="number" class="input-field" style="flex:1;padding:6px 10px;font-size:13px;" placeholder="Sin límite" value="${budgets[cat] || ''}" data-budget-cat="${cat}">
+    </div>`
+  ).join('');
+}
+
+function saveBudgets() {
+  state.budgets = {};
+  document.querySelectorAll('[data-budget-cat]').forEach(input => {
+    const val = parseFloat(input.value);
+    if (val > 0) state.budgets[input.dataset.budgetCat] = val;
+  });
+  saveState();
+  showToast('Presupuestos guardados');
+}
+
+// ═══════════════════════════════════════════════
+//  ADVANCED CHARTS
+// ═══════════════════════════════════════════════
+let chartAnnual = null, chartCashflow = null, chartMerchants = null;
+
+function getChartPeriodTxns() {
+  const sel = document.getElementById('chart-period');
+  const val = sel ? sel.value : '6';
+  const now = new Date();
+  let from;
+  if (val === 'ytd') {
+    from = new Date(now.getFullYear(), 0, 1);
+  } else if (val === 'all') {
+    from = new Date(2000, 0, 1);
+  } else {
+    from = new Date(now.getFullYear(), now.getMonth() - parseInt(val), 1);
+  }
+  return state.transactions.filter(t => {
+    const d = t.date instanceof Date ? t.date : new Date(t.date);
+    return d >= from && t.currency === 'ARS';
+  });
+}
+
+function renderAdvancedCharts() {
+  const txns = getChartPeriodTxns();
+  renderAnnualTrend(txns);
+  renderCashflowChart(txns);
+  renderHeatmap(txns);
+  renderMerchantChart(txns);
+}
+
+function renderAnnualTrend(txns) {
+  const monthly = {};
+  txns.filter(t => t.status === 'PAGADO' || t.status === 'A PAGAR').forEach(t => {
+    const mk = getMonthKey(t.date);
+    monthly[mk] = (monthly[mk] || 0) + t.amount;
+  });
+  const labels = Object.keys(monthly).sort();
+  const data = labels.map(k => monthly[k]);
+
+  if (chartAnnual) chartAnnual.destroy();
+  const ctx = document.getElementById('chart-annual');
+  if (!ctx) return;
+  chartAnnual = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels.map(l => { const [y,m] = l.split('-'); return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1] + ' ' + y.slice(2); }),
+      datasets: [{
+        data: data,
+        borderColor: '#3B82F6',
+        backgroundColor: 'rgba(59,130,246,0.1)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointBackgroundColor: '#3B82F6'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + fmtN(ctx.raw) } } },
+      scales: {
+        y: { ticks: { color: '#999', callback: v => '$' + fmtN(v) }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { ticks: { color: '#999' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderCashflowChart(txns) {
+  const months = {};
+  txns.forEach(t => {
+    const mk = getMonthKey(t.date);
+    if (!months[mk]) months[mk] = { income: 0, expense: 0 };
+    if (t.status === 'COBRADO') months[mk].income += t.amount;
+    else if (t.status === 'PAGADO' || t.status === 'A PAGAR') months[mk].expense += t.amount;
+  });
+  const labels = Object.keys(months).sort();
+  const incomeData = labels.map(k => months[k].income);
+  const expenseData = labels.map(k => months[k].expense);
+  const netData = labels.map(k => months[k].income - months[k].expense);
+
+  if (chartCashflow) chartCashflow.destroy();
+  const ctx = document.getElementById('chart-cashflow');
+  if (!ctx) return;
+  chartCashflow = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels.map(l => { const [y,m] = l.split('-'); return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1] + ' ' + y.slice(2); }),
+      datasets: [
+        { label: 'Ingresos', data: incomeData, backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4, order: 2 },
+        { label: 'Gastos', data: expenseData, backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4, order: 2 },
+        { label: 'Neto', data: netData, type: 'line', borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, pointRadius: 3, order: 1 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#999' } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + fmtN(ctx.raw) } } },
+      scales: {
+        y: { ticks: { color: '#999', callback: v => '$' + fmtN(v) }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { ticks: { color: '#999' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderHeatmap(txns) {
+  const container = document.getElementById('heatmap-container');
+  if (!container) return;
+  const daily = {};
+  txns.filter(t => t.status === 'PAGADO' || t.status === 'A PAGAR').forEach(t => {
+    const d = t.date instanceof Date ? t.date : new Date(t.date);
+    const key = d.toISOString().split('T')[0];
+    daily[key] = (daily[key] || 0) + t.amount;
+  });
+
+  const values = Object.values(daily);
+  if (!values.length) { container.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:20px;">Sin datos para el período seleccionado</div>'; return; }
+  const maxVal = Math.max(...values);
+  const levels = [0, maxVal * 0.25, maxVal * 0.5, maxVal * 0.75, maxVal];
+
+  const dates = Object.keys(daily).sort();
+  const startDate = new Date(dates[0]);
+  const endDate = new Date(dates[dates.length - 1]);
+  const start = new Date(startDate);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  const end = new Date(endDate);
+  end.setDate(end.getDate() + (7 - end.getDay()) % 7);
+
+  const weeks = [];
+  let current = new Date(start);
+  let weekCells = [];
+  while (current <= end) {
+    const key = current.toISOString().split('T')[0];
+    const val = daily[key] || 0;
+    let level = 0;
+    if (val > levels[3]) level = 4;
+    else if (val > levels[2]) level = 3;
+    else if (val > levels[1]) level = 2;
+    else if (val > 0) level = 1;
+    weekCells.push({ date: key, val, level });
+    if (weekCells.length === 7) { weeks.push(weekCells); weekCells = []; }
+    current.setDate(current.getDate() + 1);
+  }
+  if (weekCells.length) weeks.push(weekCells);
+
+  const colors = ['rgba(255,255,255,0.04)', 'rgba(59,130,246,0.25)', 'rgba(59,130,246,0.45)', 'rgba(59,130,246,0.7)', 'rgba(59,130,246,0.95)'];
+  const dayLabels = ['L','M','X','J','V','S','D'];
+
+  let html = '<div style="display:flex;gap:2px;">';
+  html += '<div style="display:flex;flex-direction:column;gap:2px;margin-right:4px;">';
+  dayLabels.forEach((d, i) => {
+    html += `<div style="width:14px;height:14px;font-size:9px;color:var(--text-tertiary);display:flex;align-items:center;justify-content:center;">${i % 2 === 0 ? d : ''}</div>`;
+  });
+  html += '</div>';
+
+  weeks.forEach(week => {
+    html += '<div style="display:flex;flex-direction:column;gap:2px;">';
+    week.forEach(cell => {
+      html += `<div title="${cell.date}: $${fmtN(cell.val)}" style="width:14px;height:14px;border-radius:2px;background:${colors[cell.level]};cursor:default;"></div>`;
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div style="display:flex;align-items:center;gap:4px;margin-top:8px;font-size:10px;color:var(--text-tertiary);">Menos ';
+  colors.forEach(c => { html += `<div style="width:12px;height:12px;border-radius:2px;background:${c};"></div>`; });
+  html += ' Más</div>';
+
+  container.innerHTML = html;
+}
+
+function renderMerchantChart(txns) {
+  const merchants = {};
+  txns.filter(t => t.status === 'PAGADO' || t.status === 'A PAGAR').forEach(t => {
+    const key = t.description.toUpperCase();
+    merchants[key] = (merchants[key] || 0) + t.amount;
+  });
+  const sorted = Object.entries(merchants).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  const labels = sorted.map(s => s[0].length > 20 ? s[0].substring(0, 20) + '…' : s[0]);
+  const data = sorted.map(s => s[1]);
+
+  if (chartMerchants) chartMerchants.destroy();
+  const ctx = document.getElementById('chart-merchants');
+  if (!ctx) return;
+  chartMerchants = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{ data: data, backgroundColor: 'rgba(59,130,246,0.6)', borderRadius: 4 }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + fmtN(ctx.raw) } } },
+      scales: {
+        x: { ticks: { color: '#999', callback: v => '$' + fmtN(v) }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#ccc', font: { size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
 function init() {
   loadState();
   renderDashboard();
   updateSidebarBalance();
   if (state.transactions.length) showDashContent();
+  generateRecurringTransactions(getMonthKey(new Date()));
 
   // Set today's date in txn modal
   document.getElementById('txn-date').value = new Date().toISOString().split('T')[0];
@@ -4683,6 +5277,26 @@ init();
 updateMobileNav('dashboard');
 // Auto-sync from cloud on page load
 setTimeout(() => cloudSyncFull(), 2000);
+
+// PWA: Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(err => console.log('SW:', err));
+}
+// PWA: Install prompt
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const card = document.getElementById('pwa-install-card');
+  if (card) card.style.display = '';
+});
+function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(r => { deferredPrompt = null; if (r.outcome === 'accepted') showToast('App instalada'); });
+  const card = document.getElementById('pwa-install-card');
+  if (card) card.style.display = 'none';
+}
 </script>
 
 <div class="mobile-nav" id="mobile-nav">
@@ -4696,6 +5310,8 @@ setTimeout(() => cloudSyncFull(), 2000);
     <button class="mobile-nav-btn" data-page="goals" onclick="mobileNav('goals')"><span>◎</span>Metas</button>
     <button class="mobile-nav-btn" data-page="pending" onclick="mobileNav('pending')"><span>🔔</span>Pendientes</button>
     <button class="mobile-nav-btn" data-page="insights" onclick="mobileNav('insights')"><span>◈</span>Insights</button>
+    <button class="mobile-nav-btn" data-page="recurring" onclick="mobileNav('recurring')"><span>🔄</span>Recurrentes</button>
+    <button class="mobile-nav-btn" data-page="charts" onclick="mobileNav('charts')"><span>📈</span>Gráficos</button>
     <button class="mobile-nav-btn" data-page="settings" onclick="mobileNav('settings')"><span>⚙</span>Config</button>
   </div>
 </div>
