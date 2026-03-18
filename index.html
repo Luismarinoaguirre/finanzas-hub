@@ -3425,7 +3425,7 @@ function processPDF(file) {
       let txns = [];
       if (fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia')) {
         txns = parseGaliciaPDF(lines);
-      } else if (fullText.includes('brubank') || fullText.includes('Brubank') || fullText.includes('Caja De Ahorro')) {
+      } else if (/brubank|caja de ahorro/i.test(fullText)) {
         txns = parseBrubankPDF(lines);
       } else {
         // Try both
@@ -3434,13 +3434,13 @@ function processPDF(file) {
       }
 
       if (!txns.length) {
-        const dateLines = lines.filter(l => /\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{2}/.test(l));
-        const sample = lines.slice(0,15).join('<br>');
+        const dateLines = lines.filter(l => /\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{2}/.test(l));
+        const sample = lines.slice(0,20).map((l,i) => (i+1)+': '+l).join('<br>');
         const dateSample = dateLines.slice(0,10).join('<br>');
         showImportError(file.name,
           'No se encontraron movimientos en el PDF.',
-          '<b>Primeras líneas:</b><br><small>' + sample + '</small>' +
-          (dateSample ? '<br><br><b>Líneas con fechas:</b><br><small>' + dateSample + '</small>' : '') +
+          '<b>Primeras 20 líneas extraídas:</b><br><small style="word-break:break-all">' + sample + '</small>' +
+          (dateSample ? '<br><br><b>Líneas con fechas (' + dateLines.length + '):</b><br><small style="word-break:break-all">' + dateSample + '</small>' : '') +
           '<br><br>Soportamos: <b>Brubank</b> (extracto/crédito) y <b>Galicia</b> (Amex/Visa).'
         ); return;
       }
@@ -3596,15 +3596,47 @@ function parseBrubankPDF(lines) {
     return txns;
   }
 
-  // Debit account format (original parser)
+  // Debit account format — flexible parsing
+  // Primary regex: DD-MM-YY ref desc $amount - $balance (or - $amount $balance)
   const amtP = '(\\$\\s*[\\d.,]+|U\\$S\\s*[\\d.,]+|-)';
   const rowRe = new RegExp('^(\\d{2}-\\d{2}-\\d{2,4})\\s+(\\d{6,12})\\s+(.+?)\\s+' + amtP + '\\s+' + amtP + '(?:\\s+' + amtP + ')?$');
+  // Fallback: more flexible — just find date + ref + desc + any amounts with $
+  const flexRe = /^(\d{2}-\d{2}-\d{2,4})\s+(\d{6,12})\s+(.+)/;
+
   for (const line of lines) {
     if (line.includes('Pesos (ARS)')) currency = 'ARS';
-    if (line.includes('lar (USD)') || line.includes('Dolar (USD)')) currency = 'USD';
+    if (line.includes('lar (USD)') || line.includes('Dolar (USD)') || line.includes('Dólar (USD)')) currency = 'USD';
+
+    let dateStr, desc, c4, c5;
     const m = line.match(rowRe);
-    if (!m) continue;
-    const [, dateStr,, desc, c4, c5] = m;
+    if (m) {
+      [, dateStr,, desc, c4, c5] = m;
+    } else {
+      // Fallback: extract amounts manually from the rest of the line
+      const fm = line.match(flexRe);
+      if (!fm) continue;
+      dateStr = fm[1];
+      const rest = fm[3];
+      // Find all $ amounts and - in the tail
+      const amounts = [];
+      const amtRe2 = /(\$\s*[\d.,]+|U\$S\s*[\d.,]+|-)\s*/g;
+      let tail = rest;
+      let lastDescEnd = 0;
+      let amtMatch;
+      // Find where amounts start (from the right side of the string)
+      const allAmts = [...rest.matchAll(/(?:^|\s)(\$\s*[\d.,]+|U\$S\s*[\d.,]+)/g)];
+      if (allAmts.length === 0) continue;
+      // First amount position marks end of description
+      const firstAmtPos = allAmts[0].index;
+      desc = rest.substring(0, firstAmtPos).trim();
+      const amtPart = rest.substring(firstAmtPos).trim();
+      // Extract debit and credit from amount part
+      const amtTokens = amtPart.split(/\s+/);
+      c4 = amtTokens[0] || '-';
+      c5 = amtTokens[1] || '-';
+    }
+
+    if (!desc) continue;
     const dp = dateStr.split('-');
     const y = dp[2].length===2?2000+parseInt(dp[2]):parseInt(dp[2]);
     const pd = new Date(y, parseInt(dp[1])-1, parseInt(dp[0]));
