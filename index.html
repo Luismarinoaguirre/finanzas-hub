@@ -3540,11 +3540,13 @@ function parseGaliciaPDF(lines) {
   return txns;
 }
 
-function parseBrubankPDF(lines) {
+function parseBrubankPDF(rawLines) {
   const txns = [];
   let currency = 'ARS';
+  // Normalize: replace unicode dashes/spaces with ASCII equivalents
+  const lines = rawLines.map(l => l.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-').replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' '));
   const pAR = s => {
-    if (!s || s === '-') return 0;
+    if (!s || s.trim() === '-') return 0;
     return Math.abs(parseFloat(s.replace(/[U$S\s$]/g,'').replace(/\./g,'').replace(',','.')) || 0);
   };
 
@@ -3558,8 +3560,6 @@ function parseBrubankPDF(lines) {
     // Edge case no space before $: "2026-02-26 4268624712 Coto Sucursal 67$ 6.115,50"
     // Negative (credit): "2026-02-21 4245954313 Devolución del pago... - $ 5.454,54"
     const ccLineRe = /^(\d{4}-\d{2}-\d{2})\s+\d{6,12}\s+(.+?)\s*(U\$S\s+[\d.,]+|-\s*\$\s*[\d.,]+|\$\s*[\d.,]+)$/;
-    console.log('[BrubankCC] Detected credit card format. Lines with dates:',
-      lines.filter(l => /^\d{4}-\d{2}-\d{2}/.test(l.trim())).map(l => '|'+l.trim()+'|'));
 
     for (const rawLine of lines) {
       const line = rawLine.trim();
@@ -3598,36 +3598,58 @@ function parseBrubankPDF(lines) {
 
   // Debit account format
   // Lines: "02-02-26 1578952530 Rodrigo Pablo Garcia Paz $ 21.700,00 - $ 376.240,06"
-  // Tail always has 3 fields: debit credit balance — each "$ X.XXX,XX" or "-"
-  // Parse from END to avoid confusion with "-" in descriptions
+  // Strategy: find all "$ amount" positions, use them to split desc from amounts
   const lineStart = /^(\d{2}-\d{2}-\d{2,4})\s+(\d{6,12})\s+/;
-  const amtOrDash = '(?:U?\\$S?\\s*[\\d.,]+|-)';
-  const tailRe = new RegExp('(' + amtOrDash + ')\\s+(' + amtOrDash + ')\\s+(' + amtOrDash + ')\\s*$');
 
   for (const line of lines) {
-    if (line.includes('Pesos (ARS)')) currency = 'ARS';
-    if (/[Dd][oó]lar\s*\(USD\)/.test(line)) currency = 'USD';
+    if (/Pesos\s*\(ARS\)/i.test(line)) currency = 'ARS';
+    if (/[Dd][oó]lar\s*\(USD\)/i.test(line)) currency = 'USD';
 
     const sm = line.match(lineStart);
     if (!sm) continue;
     const dateStr = sm[1];
     const afterRef = line.substring(sm[0].length);
 
-    const tm = afterRef.match(tailRe);
-    if (!tm) continue;
-    const desc = afterRef.substring(0, tm.index).trim();
+    // Find all $ amount positions in the string
+    const dollarPositions = [];
+    const dolRe = /(?:U?\$S?\s*[\d.,]+)/g;
+    let dm;
+    while ((dm = dolRe.exec(afterRef)) !== null) dollarPositions.push({ idx: dm.index, val: dm[0] });
+
+    // Need at least 2 $ amounts (one is debit/credit, one is balance)
+    if (dollarPositions.length < 2) continue;
+
+    // Description is everything before the first $ amount, trimmed of trailing dashes/spaces
+    const firstDollar = dollarPositions[0].idx;
+    const desc = afterRef.substring(0, firstDollar).replace(/[\s\-]+$/, '').trim();
     if (!desc) continue;
-    const debitStr = tm[1], creditStr = tm[2]; // tm[3] = balance (ignored)
+
+    // Amount section: from first $ to end
+    const amtSection = afterRef.substring(firstDollar);
+    // Check if description side ends with space+dash = debit is empty (it's a credit/income)
+    const beforeAmts = afterRef.substring(0, firstDollar);
+    const debitIsEmpty = /[\s]-[\s]*$/.test(beforeAmts) || beforeAmts.trim().endsWith('-');
+
+    let debitAmt = 0, creditAmt = 0;
+    if (debitIsEmpty) {
+      // Pattern: "desc - $ credit $ balance" → income
+      creditAmt = pAR(dollarPositions[0].val);
+    } else {
+      // Pattern: "desc $ debit - $ balance" → expense
+      debitAmt = pAR(dollarPositions[0].val);
+      // Check if there's a credit between debit and balance
+      if (dollarPositions.length >= 3) {
+        creditAmt = pAR(dollarPositions[1].val);
+      }
+    }
 
     const dp = dateStr.split('-');
     const y = dp[2].length===2?2000+parseInt(dp[2]):parseInt(dp[2]);
     const pd = new Date(y, parseInt(dp[1])-1, parseInt(dp[0]));
     if (isNaN(pd.getTime())) continue;
 
-    const deb = pAR(debitStr), cred = pAR(creditStr);
-    if (!deb && !cred) continue;
-    const isGasto = deb > 0 && (creditStr === '-' || !cred);
-    const amount = isGasto ? deb : cred;
+    const isGasto = debitAmt > 0 && !debitIsEmpty;
+    const amount = isGasto ? debitAmt : creditAmt;
     if (!amount) continue;
     txns.push({
       id: uid(), date: pd, description: desc.trim(), amount: Math.round(amount*100)/100,
