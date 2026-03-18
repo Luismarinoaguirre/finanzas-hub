@@ -3550,9 +3550,14 @@ function parseBrubankPDF(rawLines) {
     return Math.abs(parseFloat(s.replace(/[U$S\s$]/g,'').replace(/\./g,'').replace(',','.')) || 0);
   };
 
-  // Detect credit card statement (has YYYY-MM-DD dates and "#Ref")
+  // Detect credit card vs debit account
+  // Credit card: has "Dólares" or "Pesos" columns AND YYYY-MM-DD dates
+  // Debit account: has "Débito" "Crédito" "Saldo" columns AND DD-MM-YY dates
   const fullText = lines.join('\n');
-  const isCreditCard = /Fecha\s+#Ref\s+Descripci/i.test(fullText) || (/Tarjeta \d{4}/i.test(fullText) && /\d{4}-\d{2}-\d{2}/.test(fullText));
+  const hasYMDdates = /\d{4}-\d{2}-\d{2}/.test(fullText);
+  const hasDolaresCol = /D[oó]lares|Pesos\s*$/m.test(fullText);
+  const hasDebitoCol = /D[eé]bito\s+Cr[eé]dito/i.test(fullText);
+  const isCreditCard = hasYMDdates && !hasDebitoCol && (/Tarjeta \d{4}/i.test(fullText) || hasDolaresCol);
 
   if (isCreditCard) {
     // Single-line format: "2026-01-31 4183588778 Gruyenthal $ 19.484,13"
