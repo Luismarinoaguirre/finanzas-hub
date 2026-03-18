@@ -3390,14 +3390,26 @@ function processPDF(file) {
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
-        const byY = {};
-        content.items.forEach(item => {
-          const y = Math.round(item.transform[5]);
-          if (!byY[y]) byY[y] = [];
-          byY[y].push({ x: item.transform[4], text: item.str });
+        // Group items by Y with tolerance (items within 3px = same line)
+        const items = content.items.map(item => ({
+          x: item.transform[4], y: Math.round(item.transform[5]), text: item.str
+        })).sort((a,b) => b.y - a.y || a.x - b.x);
+        const rows = [];
+        let curRow = [];
+        let curY = null;
+        items.forEach(item => {
+          if (curY === null || Math.abs(item.y - curY) <= 3) {
+            curRow.push(item);
+            if (curY === null) curY = item.y;
+          } else {
+            if (curRow.length) rows.push(curRow);
+            curRow = [item];
+            curY = item.y;
+          }
         });
-        Object.keys(byY).sort((a,b)=>b-a).forEach(y =>
-          allLines.push(byY[y].sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ').trim())
+        if (curRow.length) rows.push(curRow);
+        rows.forEach(row =>
+          allLines.push(row.sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ').trim())
         );
       }
       const lines = allLines.filter(Boolean);
@@ -3416,11 +3428,14 @@ function processPDF(file) {
       }
 
       if (!txns.length) {
-        const sample = lines.slice(0,10).join('<br>');
+        const dateLines = lines.filter(l => /\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{2}/.test(l));
+        const sample = lines.slice(0,15).join('<br>');
+        const dateSample = dateLines.slice(0,10).join('<br>');
         showImportError(file.name,
           'No se encontraron movimientos en el PDF.',
-          '<b>Primeras líneas detectadas:</b><br>' + sample +
-          '<br><br>Soportamos: <b>Brubank</b> (extracto de cuenta) y <b>Galicia</b> (resumen Amex/Visa).'
+          '<b>Primeras líneas:</b><br><small>' + sample + '</small>' +
+          (dateSample ? '<br><br><b>Líneas con fechas:</b><br><small>' + dateSample + '</small>' : '') +
+          '<br><br>Soportamos: <b>Brubank</b> (extracto/crédito) y <b>Galicia</b> (Amex/Visa).'
         ); return;
       }
       finishImport(txns, file.name);
@@ -3532,44 +3547,45 @@ function parseBrubankPDF(lines) {
   const isCreditCard = /Fecha\s+#Ref\s+Descripci/i.test(fullText) || (/Tarjeta \d{4}/i.test(fullText) && /\d{4}-\d{2}-\d{2}/.test(fullText));
 
   if (isCreditCard) {
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i].trim();
-      const dateMatch = line.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (dateMatch) {
-        const [, y, mo, d] = dateMatch;
-        const pd = new Date(parseInt(y), parseInt(mo)-1, parseInt(d));
-        let desc = '', amount = 0, cur = 'ARS';
-        let j = i + 1;
-        if (j < lines.length && /^\d{6,12}$/.test(lines[j].trim())) j++;
-        if (j < lines.length) { desc = lines[j].trim(); j++; }
-        while (j < lines.length && !(/^\d{4}-\d{2}-\d{2}$/.test(lines[j].trim())) && j < i + 6) {
-          const amtLine = lines[j].trim();
-          if (/^U\$S\s/.test(amtLine)) { cur = 'USD'; amount = pAR(amtLine); j++; break; }
-          else if (/^-?\s*\$\s*[\d.,]+$/.test(amtLine)) {
-            cur = 'ARS'; amount = pAR(amtLine);
-            if (amtLine.trim().startsWith('-')) amount = -amount;
-            j++; break;
-          }
-          j++;
-        }
-        i = j;
-        if (desc && Math.abs(amount) > 0 && !isNaN(pd.getTime())) {
-          const isCredit = amount < 0;
-          if (!/^(Pago del plan|Devoluci[oó]n del pago|Si hiciste gastos)/i.test(desc)) {
-            txns.push({
-              id: uid(), date: pd, description: desc, amount: Math.abs(Math.round(amount*100)/100),
-              currency: cur, category: auto_cat(desc), status: isCredit ? 'COBRADO' : 'PAGADO',
-              bank: 'Visa Brubank', tcId: resolveTcId('Visa Brubank'), empresa: '',
-              cuotaNum: null, cuotaTotal: null,
-              month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
-              week: '', source: 'tc'
-            });
-          }
-        }
-        continue;
+    // Single-line format: "2026-01-31 4183588778 Gruyenthal $ 19.484,13"
+    // USD format: "2026-02-21 4249894006 Wl *Vue*Testing Exam U$S 59,00"
+    // Edge case no space before $: "2026-02-26 4268624712 Coto Sucursal 67$ 6.115,50"
+    // Negative (credit): "2026-02-21 4245954313 Devolución del pago... - $ 5.454,54"
+    const ccLineRe = /^(\d{4}-\d{2}-\d{2})\s+\d{6,12}\s+(.+?)\s*(U\$S\s+[\d.,]+|-\s*\$\s*[\d.,]+|\$\s*[\d.,]+)$/;
+    console.log('[BrubankCC] Detected credit card format. Lines with dates:',
+      lines.filter(l => /^\d{4}-\d{2}-\d{2}/.test(l.trim())).map(l => '|'+l.trim()+'|'));
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const m = line.match(ccLineRe);
+      if (!m) continue;
+      const [, dateStr, desc, amtStr] = m;
+      const [y, mo, d] = dateStr.split('-').map(Number);
+      const pd = new Date(y, mo - 1, d);
+      if (isNaN(pd.getTime())) continue;
+
+      let cur = 'ARS', amount = 0, isNeg = false;
+      if (/U\$S/i.test(amtStr)) {
+        cur = 'USD';
+        amount = pAR(amtStr);
+      } else {
+        if (amtStr.trim().startsWith('-')) isNeg = true;
+        amount = pAR(amtStr);
+        if (isNeg) amount = -amount;
       }
-      i++;
+
+      if (!desc || Math.abs(amount) === 0) continue;
+      if (/^(Pago del plan|Devoluci[oó]n del pago|Si hiciste gastos)/i.test(desc)) continue;
+
+      const isCredit = amount < 0;
+      txns.push({
+        id: uid(), date: pd, description: desc.trim(), amount: Math.abs(Math.round(amount * 100) / 100),
+        currency: cur, category: auto_cat(desc), status: isCredit ? 'COBRADO' : 'PAGADO',
+        bank: 'Visa Brubank', tcId: resolveTcId('Visa Brubank'), empresa: '',
+        cuotaNum: null, cuotaTotal: null,
+        month: pd.getFullYear() + '-' + String(pd.getMonth() + 1).padStart(2, '0'),
+        week: '', source: 'tc'
+      });
     }
     return txns;
   }
