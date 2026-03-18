@@ -2616,11 +2616,9 @@ function saveTxn() {
   };
 
   if (!editingTxnId) {
-    const txnDate = txn.date instanceof Date ? txn.date.toISOString().split('T')[0] : String(txn.date).split('T')[0];
-    const txnKey = txnDate + '-' + desc.toLowerCase() + '-' + txn.amount;
+    const descNorm = desc.toLowerCase().trim();
     const dupe = state.transactions.find(x => {
-      const xd = x.date instanceof Date ? x.date.toISOString().split('T')[0] : String(x.date).split('T')[0];
-      return xd + '-' + (x.description||'').toLowerCase().trim() + '-' + x.amount === txnKey;
+      return (x.description||'').toLowerCase().trim() === descNorm && x.amount === txn.amount;
     });
     if (dupe) {
       const dupeDate = dupe.date instanceof Date ? dupe.date.toLocaleDateString('es-AR') : dupe.date;
