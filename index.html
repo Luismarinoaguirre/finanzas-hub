@@ -3454,7 +3454,10 @@ function parseGaliciaPDF(lines) {
   //   "02.02.26 SU PAGO EN USD 485,78-"
   //   "04.11.25 265325* MERPAGO*VL2 Cuota 04/06 38.787,66"
   //   "26.02.26 IMPUESTO DE SELLOS $ 1.546,89"
-  const txnRe = /^(\d{2}\.\d{2}\.\d{2,4})\s+(?:\d+\*\s+|=)?(.+?)\s+([\d.,]+-?|\d+,\d{2})\s*(?:([\d.,]+-?))?$/;
+  // Regex for standard ARS-only lines: date desc amount [amount2]
+  const txnRe = /^(\d{2}\.\d{2}\.\d{2,4})\s+(?:\d+[\*KF]?\s+|=)?(.+?)\s+([\d.,]+-?)\s*(?:([\d.,]+-?))?$/;
+  // Regex for foreign currency lines: date desc CURRENCY amount [dollarAmount]
+  const txnFxRe = /^(\d{2}\.\d{2}\.\d{2,4})\s+(?:\d+[\*KF]?\s+|=)?(.+?)\s+(?:USD|BRL|EUR)\s+([\d.,]+)\s+([\d.,]+)$/;
 
   for (const line of lines) {
     if (/FECHA\s+COMPROBANTE\s+DETALLE/i.test(line)) { inTxns = true; continue; }
@@ -3462,33 +3465,44 @@ function parseGaliciaPDF(lines) {
     if (!inTxns) continue;
     if (SKIP_LINES.test(line.trim())) continue;
 
-    const m = line.match(txnRe);
-    if (!m) continue;
+    // Try foreign currency match first
+    let mFx = line.match(txnFxRe);
+    let m = mFx ? null : line.match(txnRe);
+    if (!mFx && !m) continue;
 
-    const [, dateStr, descRaw, col1, col2] = m;
+    let dateStr, descRaw, amtARS = 0, amtUSD = 0, detectedCurrency = 'ARS';
+
+    if (mFx) {
+      // Foreign currency line: date desc CURRENCY originalAmt dollarEquivalent
+      dateStr = mFx[1];
+      descRaw = mFx[2];
+      amtUSD = pAR(mFx[4]); // Dollar equivalent (last column)
+      detectedCurrency = 'USD';
+    } else {
+      dateStr = m[1];
+      descRaw = m[2];
+      amtARS = pAR(m[3]);
+      amtUSD = m[4] ? pAR(m[4]) : 0;
+      // If only dollar column has value, it's USD
+      if (amtUSD !== 0 && amtARS === 0) detectedCurrency = 'USD';
+    }
+
     const dp = dateStr.split('.');
     const y = dp[2].length===2 ? 2000+parseInt(dp[2]) : parseInt(dp[2]);
     const pd = new Date(y, parseInt(dp[1])-1, parseInt(dp[0]));
     if (isNaN(pd.getTime())) continue;
 
     const desc = descRaw.replace(/\s+/g,' ').trim();
-    // Skip payments to bank and balance lines
     if (!desc || /^(SU PAGO EN|SALDO ANTERIOR|DEV\.IMP\.)/i.test(desc)) continue;
 
-    // col1 = pesos amount, col2 = dollars amount (if present)
-    const amtARS = pAR(col1);
-    const amtUSD = col2 ? pAR(col2) : 0;
-
-    // Negative = pago/devolución (crédito), positive = gasto
     if (!amtARS && !amtUSD) continue;
 
-    const isUSD = amtUSD !== 0 && amtARS === 0;
+    const isUSD = detectedCurrency === 'USD';
     const rawAmt = isUSD ? amtUSD : amtARS;
-    const isCredit = rawAmt < 0; // payments back
+    const isCredit = rawAmt < 0;
     const amount = Math.abs(rawAmt);
     if (!amount) continue;
 
-    // Detect cuotas
     const cm = desc.match(/[Cc]uota[s]?\s*(\d{1,2})\s*[\/\-]\s*(\d{1,2})/);
 
     txns.push({
@@ -3512,6 +3526,55 @@ function parseBrubankPDF(lines) {
     if (!s || s === '-') return 0;
     return Math.abs(parseFloat(s.replace(/[U$S\s$]/g,'').replace(/\./g,'').replace(',','.')) || 0);
   };
+
+  // Detect credit card statement (has YYYY-MM-DD dates and "#Ref")
+  const fullText = lines.join('\n');
+  const isCreditCard = /Fecha\s+#Ref\s+Descripci/i.test(fullText) || (/Tarjeta \d{4}/i.test(fullText) && /\d{4}-\d{2}-\d{2}/.test(fullText));
+
+  if (isCreditCard) {
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      const dateMatch = line.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (dateMatch) {
+        const [, y, mo, d] = dateMatch;
+        const pd = new Date(parseInt(y), parseInt(mo)-1, parseInt(d));
+        let desc = '', amount = 0, cur = 'ARS';
+        let j = i + 1;
+        if (j < lines.length && /^\d{6,12}$/.test(lines[j].trim())) j++;
+        if (j < lines.length) { desc = lines[j].trim(); j++; }
+        while (j < lines.length && !(/^\d{4}-\d{2}-\d{2}$/.test(lines[j].trim())) && j < i + 6) {
+          const amtLine = lines[j].trim();
+          if (/^U\$S\s/.test(amtLine)) { cur = 'USD'; amount = pAR(amtLine); j++; break; }
+          else if (/^-?\s*\$\s*[\d.,]+$/.test(amtLine)) {
+            cur = 'ARS'; amount = pAR(amtLine);
+            if (amtLine.trim().startsWith('-')) amount = -amount;
+            j++; break;
+          }
+          j++;
+        }
+        i = j;
+        if (desc && Math.abs(amount) > 0 && !isNaN(pd.getTime())) {
+          const isCredit = amount < 0;
+          if (!/^(Pago del plan|Devoluci[oó]n del pago|Si hiciste gastos)/i.test(desc)) {
+            txns.push({
+              id: uid(), date: pd, description: desc, amount: Math.abs(Math.round(amount*100)/100),
+              currency: cur, category: auto_cat(desc), status: isCredit ? 'COBRADO' : 'PAGADO',
+              bank: 'Visa Brubank', tcId: resolveTcId('Visa Brubank'), empresa: '',
+              cuotaNum: null, cuotaTotal: null,
+              month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
+              week: '', source: 'tc'
+            });
+          }
+        }
+        continue;
+      }
+      i++;
+    }
+    return txns;
+  }
+
+  // Debit account format (original parser)
   const amtP = '(\\$[\\d.,]+|U\\$S[\\s\\d.,]+|-)';
   const rowRe = new RegExp('^(\\d{2}-\\d{2}-\\d{2,4})\\s+(\\d{6,12})\\s+(.+?)\\s+' + amtP + '\\s+' + amtP + '(?:\\s+' + amtP + ')?$');
   for (const line of lines) {
