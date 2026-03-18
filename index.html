@@ -1157,6 +1157,14 @@ tr:hover td { background: rgba(255,255,255,0.025); }
       <div id="budget-bars" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
 
+    <!-- Gastos Compartidos -->
+    <div class="glass-card fade-up d4" id="shared-section" style="display:none;padding:20px;margin-bottom:20px;">
+      <div class="chart-card-title">Gastos compartidos</div>
+      <div class="chart-card-sub" id="shared-summary">Resumen del mes</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0;" id="shared-kpis"></div>
+      <div id="shared-list" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"></div>
+    </div>
+
     <!-- Top 5 -->
     <div class="glass-card fade-up d3" style="padding:0;">
       <div class="table-header">
@@ -1207,6 +1215,11 @@ tr:hover td { background: rgba(255,255,255,0.025); }
         <option value="">ARS + USD</option>
         <option value="ARS">Solo ARS</option>
         <option value="USD">Solo USD</option>
+      </select>
+      <select class="filter-select" id="filter-shared" onchange="renderTransactions()">
+        <option value="">Todos</option>
+        <option value="shared">Solo compartidos</option>
+        <option value="not-shared">Solo individuales</option>
       </select>
     </div>
   </div>
@@ -1943,6 +1956,16 @@ tr:hover td { background: rgba(255,255,255,0.025); }
           <input type="number" class="input-field" id="txn-cuota-total" placeholder="Total" min="1" style="flex:1;">
         </div>
       </div>
+      <div class="input-group">
+        <div class="input-label">Gasto compartido</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-secondary);">
+            <input type="checkbox" id="txn-shared" onchange="document.getElementById('txn-shared-with').style.display=this.checked?'block':'none'" style="width:18px;height:18px;accent-color:var(--blue);">
+            Compartido
+          </label>
+        </div>
+        <input type="text" class="input-field" id="txn-shared-with" placeholder="¿Con quién? (ej: Juan, María)" style="display:none;margin-top:8px;">
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-glass" onclick="closeModal('modal-txn')">Cancelar</button>
@@ -2558,6 +2581,9 @@ function openNewTxn(id) {
   document.getElementById('txn-empresa').value = txn ? (txn.empresa || '') : '';
   document.getElementById('txn-cuota-num').value = txn ? (txn.cuotaNum || '') : '';
   document.getElementById('txn-cuota-total').value = txn ? (txn.cuotaTotal || '') : '';
+  document.getElementById('txn-shared').checked = txn ? (txn.shared || false) : false;
+  document.getElementById('txn-shared-with').value = txn ? (txn.sharedWith || '') : '';
+  document.getElementById('txn-shared-with').style.display = (txn && txn.shared) ? 'block' : 'none';
   catSel.value = txn ? txn.category : state.categories[0];
 
   openModal('modal-txn');
@@ -2583,6 +2609,8 @@ function saveTxn() {
     empresa: document.getElementById('txn-empresa').value,
     cuotaNum: parseInt(document.getElementById('txn-cuota-num').value) || null,
     cuotaTotal: parseInt(document.getElementById('txn-cuota-total').value) || null,
+    shared: document.getElementById('txn-shared').checked,
+    sharedWith: document.getElementById('txn-shared').checked ? document.getElementById('txn-shared-with').value.trim() : '',
     month: getMonthKey(date),
     week: getWeekKey(date),
   };
@@ -3838,6 +3866,7 @@ function renderDashboard() {
   renderCatBars(monthTxns);
   renderBudgetBars(monthTxns);
   checkBudgetAlerts(monthTxns);
+  renderSharedSection(monthTxns);
   renderTop5(monthTxns);
   updateSidebarBalance();
 }
@@ -3930,6 +3959,50 @@ function renderCatBars(txns) {
     </div>`).join('');
 }
 
+function renderSharedSection(txns) {
+  const section = document.getElementById('shared-section');
+  const sharedTxns = (txns||[]).filter(t => t.shared && t.currency === 'ARS');
+  if (sharedTxns.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  const totalShared = sharedTxns.reduce((s,t) => s + t.amount, 0);
+  const totalMonth = (txns||[]).filter(t => t.currency === 'ARS').reduce((s,t) => s + t.amount, 0);
+  const pct = totalMonth > 0 ? Math.round(totalShared / totalMonth * 100) : 0;
+
+  // Group by person
+  const byPerson = {};
+  sharedTxns.forEach(t => {
+    const people = (t.sharedWith || 'Sin especificar').split(',').map(p => p.trim()).filter(Boolean);
+    people.forEach(p => { byPerson[p] = (byPerson[p] || 0) + t.amount; });
+  });
+
+  document.getElementById('shared-summary').textContent = `${sharedTxns.length} gastos compartidos · ${pct}% del total`;
+
+  document.getElementById('shared-kpis').innerHTML = `
+    <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:12px;padding:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px;">Total compartido</div>
+      <div style="font-size:20px;font-weight:700;color:var(--purple);font-family:var(--font-mono);">$${fmtN(totalShared)}</div>
+    </div>
+    <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:12px;padding:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px;">Tu parte (50%)</div>
+      <div style="font-size:20px;font-weight:700;color:var(--teal);font-family:var(--font-mono);">$${fmtN(totalShared/2)}</div>
+    </div>
+    <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:12px;padding:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px;">Personas</div>
+      <div style="font-size:20px;font-weight:700;color:var(--orange);font-family:var(--font-mono);">${Object.keys(byPerson).length}</div>
+    </div>`;
+
+  const sortedPeople = Object.entries(byPerson).sort((a,b) => b[1] - a[1]);
+  document.getElementById('shared-list').innerHTML = sortedPeople.map(([person, amount]) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--glass);border:1px solid var(--glass-border);border-radius:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--purple-glow);display:flex;align-items:center;justify-content:center;font-size:14px;">👤</div>
+        <span style="font-weight:500;color:var(--text-primary);">${esc(person)}</span>
+      </div>
+      <span style="font-weight:700;font-family:var(--font-mono);color:var(--text-primary);">$${fmtN(amount)}</span>
+    </div>`).join('');
+}
+
 function renderTop5(txns) {
   const top5 = [...(txns||[])].filter(t=>t.currency==='ARS').sort((a,b)=>b.amount-a.amount).slice(0,5);
   const el = document.getElementById('top5-grid');
@@ -3975,7 +4048,9 @@ function populateFilters() {
     months.map(m => { const [y,mo]=m.split('-').map(Number); return `<option value="${m}">${MNAMES[mo-1]} ${y}</option>`; }).join('');
 
   const fCat = document.getElementById('filter-cat');
-  const cats = [...new Set(state.transactions.map(t=>t.category||'Otros'))].sort();
+  const cats = [...new Set(state.transactions.map(t=>t.category||'Otros'))]
+    .filter(c => c && isNaN(c) && !/^\$?\d[\d.,]*$/.test(c.trim()))
+    .sort();
   fCat.innerHTML = '<option value="">Todas las categorías</option>' +
     cats.map(c => `<option value="${c}">${c}</option>`).join('');
 
@@ -4000,11 +4075,14 @@ function getFilteredTxns() {
   const cat = document.getElementById('filter-cat')?.value;
   const status = document.getElementById('filter-status')?.value;
   const currency = document.getElementById('filter-currency')?.value;
+  const shared = document.getElementById('filter-shared')?.value;
   if (search) txns = txns.filter(t => t.description.toLowerCase().includes(search) || (t.category||'').toLowerCase().includes(search));
   if (month) txns = txns.filter(t => getMonthKey(t.date)===month);
   if (cat) txns = txns.filter(t => t.category===cat);
   if (status) txns = txns.filter(t => (t.status||'PAGADO')===status);
   if (currency) txns = txns.filter(t => t.currency===currency);
+  if (shared === 'shared') txns = txns.filter(t => t.shared);
+  if (shared === 'not-shared') txns = txns.filter(t => !t.shared);
   return txns.sort((a,b) => new Date(b.date)-new Date(a.date));
 }
 
@@ -4034,7 +4112,7 @@ function renderTxnPage(txns) {
     const amtCls = ['A COBRAR','COBRADO'].includes(status) ? 'positive' : '';
     return `<tr>
       <td style="color:var(--text-tertiary);font-size:12px;">${dateStr}</td>
-      <td class="td-desc">${esc(t.description)}</td>
+      <td class="td-desc">${esc(t.description)}${t.shared ? ' <span style="font-size:10px;color:var(--purple);font-weight:600;" title="'+(t.sharedWith||'Compartido')+'">👥</span>' : ''}</td>
       <td><span class="badge" style="background:${catColor(t.category||'Otros')}22;color:${catColor(t.category||'Otros')};border:1px solid ${catColor(t.category||'Otros')}33;">${esc(t.category||'Otros')}</span></td>
       <td style="font-size:12px;">${tc?`<span style="color:${tc.color||'var(--blue-light)'};font-weight:600;">💳 ${esc(tc.name)}</span>`:esc(t.bank||'—')}</td>
       <td><span class="badge status-${statusCls}">${esc(status)}</span></td>
