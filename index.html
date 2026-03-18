@@ -1988,6 +1988,19 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   </div>
 </div>
 
+<!-- Duplicate Scanner -->
+<div class="modal-overlay" id="modal-dupe-scan">
+  <div class="modal" style="width:620px;max-height:85vh;display:flex;flex-direction:column;">
+    <div class="modal-title">🔍 Duplicados detectados</div>
+    <p style="color:var(--text-secondary);margin:8px 0 12px" id="dupe-scan-summary"></p>
+    <div id="dupe-scan-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:16px;max-height:55vh;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-glass" onclick="closeModal('modal-dupe-scan')" style="flex:1">Cerrar</button>
+      <button class="btn btn-danger" onclick="deleteSelectedDupes()" style="flex:1" id="dupe-scan-delete-btn">🗑 Eliminar seleccionados</button>
+    </div>
+  </div>
+</div>
+
 <!-- New Credit Card -->
 <div class="modal-overlay" id="modal-tc">
   <div class="modal">
@@ -2644,6 +2657,87 @@ function saveTxn() {
   renderDashboard();
   updateSidebarBalance();
   showDashContent();
+}
+
+// ═══════════════════════════════════════════════
+//  DUPLICATE SCANNER (on load)
+// ═══════════════════════════════════════════════
+function normalizeDupeKey(s) {
+  return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+
+function scanDuplicates() {
+  const txns = state.transactions;
+  const groups = {};
+  txns.forEach(t => {
+    const desc = normalizeDupeKey(t.description);
+    const date = t.date instanceof Date ? t.date.toISOString().split('T')[0] : String(t.date).split('T')[0];
+    const key = desc + '|' + t.amount + '|' + date;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(t);
+  });
+
+  const dupeGroups = Object.values(groups).filter(g => g.length > 1);
+  if (dupeGroups.length === 0) return;
+
+  const totalDupes = dupeGroups.reduce((s,g) => s + g.length - 1, 0);
+  document.getElementById('dupe-scan-summary').textContent =
+    `Se encontraron ${totalDupes} posibles duplicados en ${dupeGroups.length} grupos. Seleccioná los que querés eliminar.`;
+
+  const list = document.getElementById('dupe-scan-list');
+  list.innerHTML = dupeGroups.map((group, gi) => {
+    const first = group[0];
+    const d = first.date instanceof Date ? first.date : new Date(first.date);
+    return `
+      <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:12px;padding:14px;">
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:14px;">
+          ${esc(first.description)} · $${fmtN(first.amount)} · ${group.length} copias
+        </div>
+        ${group.map((t, ti) => {
+          const td = t.date instanceof Date ? t.date : new Date(t.date);
+          const dateStr = td.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+          const isFirst = ti === 0;
+          return `
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;
+              ${isFirst ? 'background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);' : 'background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);'}
+              margin-bottom:4px;">
+              <input type="checkbox" class="dupe-check" data-id="${t.id}" ${!isFirst ? 'checked' : ''}
+                style="width:16px;height:16px;accent-color:var(--red);">
+              <span style="flex:1;font-size:13px;color:var(--text-secondary);">
+                ${dateStr} · ${esc(t.category||'Sin cat.')} · ${esc(t.bank||'—')}
+                ${isFirst ? '<span style="color:var(--green);font-weight:600;font-size:11px;margin-left:6px;">✓ ORIGINAL</span>' : '<span style="color:var(--red);font-weight:600;font-size:11px;margin-left:6px;">DUPLICADO</span>'}
+              </span>
+            </label>`;
+        }).join('')}
+      </div>`;
+  }).join('');
+
+  updateDupeDeleteCount();
+  openModal('modal-dupe-scan');
+}
+
+function updateDupeDeleteCount() {
+  const checked = document.querySelectorAll('.dupe-check:checked').length;
+  document.getElementById('dupe-scan-delete-btn').textContent = `🗑 Eliminar seleccionados (${checked})`;
+}
+
+// Delegate change event for checkboxes
+document.addEventListener('change', e => {
+  if (e.target.classList.contains('dupe-check')) updateDupeDeleteCount();
+});
+
+function deleteSelectedDupes() {
+  const checks = document.querySelectorAll('.dupe-check:checked');
+  const idsToRemove = new Set([...checks].map(c => c.dataset.id));
+  if (idsToRemove.size === 0) { showToast('No hay duplicados seleccionados', 'error'); return; }
+
+  state.transactions = state.transactions.filter(t => !idsToRemove.has(t.id));
+  saveState();
+  closeModal('modal-dupe-scan');
+  renderDashboard();
+  renderTransactions();
+  updateSidebarBalance();
+  showToast(`✅ ${idsToRemove.size} duplicados eliminados`);
 }
 
 function confirmDupeTxn() {
@@ -5614,6 +5708,9 @@ function init() {
     if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));
     if ((e.metaKey||e.ctrlKey) && e.key === 'n') { e.preventDefault(); openNewTxn(); }
   });
+
+  // Scan for duplicates on load (delay to let UI render first)
+  setTimeout(() => scanDuplicates(), 1500);
 }
 
 init();
