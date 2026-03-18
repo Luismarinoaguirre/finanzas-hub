@@ -3596,54 +3596,37 @@ function parseBrubankPDF(lines) {
     return txns;
   }
 
-  // Debit account format — flexible parsing
-  // Primary regex: DD-MM-YY ref desc $amount - $balance (or - $amount $balance)
-  const amtP = '(\\$\\s*[\\d.,]+|U\\$S\\s*[\\d.,]+|-)';
-  const rowRe = new RegExp('^(\\d{2}-\\d{2}-\\d{2,4})\\s+(\\d{6,12})\\s+(.+?)\\s+' + amtP + '\\s+' + amtP + '(?:\\s+' + amtP + ')?$');
-  // Fallback: more flexible — just find date + ref + desc + any amounts with $
-  const flexRe = /^(\d{2}-\d{2}-\d{2,4})\s+(\d{6,12})\s+(.+)/;
+  // Debit account format
+  // Lines: "02-02-26 1578952530 Rodrigo Pablo Garcia Paz $ 21.700,00 - $ 376.240,06"
+  // Tail always has 3 fields: debit credit balance — each "$ X.XXX,XX" or "-"
+  // Parse from END to avoid confusion with "-" in descriptions
+  const lineStart = /^(\d{2}-\d{2}-\d{2,4})\s+(\d{6,12})\s+/;
+  const amtOrDash = '(?:U?\\$S?\\s*[\\d.,]+|-)';
+  const tailRe = new RegExp('(' + amtOrDash + ')\\s+(' + amtOrDash + ')\\s+(' + amtOrDash + ')\\s*$');
 
   for (const line of lines) {
     if (line.includes('Pesos (ARS)')) currency = 'ARS';
-    if (line.includes('lar (USD)') || line.includes('Dolar (USD)') || line.includes('Dólar (USD)')) currency = 'USD';
+    if (/[Dd][oó]lar\s*\(USD\)/.test(line)) currency = 'USD';
 
-    let dateStr, desc, c4, c5;
-    const m = line.match(rowRe);
-    if (m) {
-      [, dateStr,, desc, c4, c5] = m;
-    } else {
-      // Fallback: extract amounts manually from the rest of the line
-      const fm = line.match(flexRe);
-      if (!fm) continue;
-      dateStr = fm[1];
-      const rest = fm[3];
-      // Find all $ amounts and - in the tail
-      const amounts = [];
-      const amtRe2 = /(\$\s*[\d.,]+|U\$S\s*[\d.,]+|-)\s*/g;
-      let tail = rest;
-      let lastDescEnd = 0;
-      let amtMatch;
-      // Find where amounts start (from the right side of the string)
-      const allAmts = [...rest.matchAll(/(?:^|\s)(\$\s*[\d.,]+|U\$S\s*[\d.,]+)/g)];
-      if (allAmts.length === 0) continue;
-      // First amount position marks end of description
-      const firstAmtPos = allAmts[0].index;
-      desc = rest.substring(0, firstAmtPos).trim();
-      const amtPart = rest.substring(firstAmtPos).trim();
-      // Extract debit and credit from amount part
-      const amtTokens = amtPart.split(/\s+/);
-      c4 = amtTokens[0] || '-';
-      c5 = amtTokens[1] || '-';
-    }
+    const sm = line.match(lineStart);
+    if (!sm) continue;
+    const dateStr = sm[1];
+    const afterRef = line.substring(sm[0].length);
 
+    const tm = afterRef.match(tailRe);
+    if (!tm) continue;
+    const desc = afterRef.substring(0, tm.index).trim();
     if (!desc) continue;
+    const debitStr = tm[1], creditStr = tm[2]; // tm[3] = balance (ignored)
+
     const dp = dateStr.split('-');
     const y = dp[2].length===2?2000+parseInt(dp[2]):parseInt(dp[2]);
     const pd = new Date(y, parseInt(dp[1])-1, parseInt(dp[0]));
     if (isNaN(pd.getTime())) continue;
-    const deb = pAR(c4), cred = pAR(c5);
+
+    const deb = pAR(debitStr), cred = pAR(creditStr);
     if (!deb && !cred) continue;
-    const isGasto = deb > 0 && (c5==='-' || !cred);
+    const isGasto = deb > 0 && (creditStr === '-' || !cred);
     const amount = isGasto ? deb : cred;
     if (!amount) continue;
     txns.push({
