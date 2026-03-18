@@ -1056,7 +1056,7 @@ tr:hover td { background: rgba(255,255,255,0.025); }
     ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
     <div class="upload-icon">📊</div>
     <div class="upload-title">Importá tus movimientos</div>
-    <div class="upload-sub">CSV de tu Google Sheets · PDF de Brubank · XLSX de tarjetas.<br>Se importan automáticamente sin duplicados.</div>
+    <div class="upload-sub">CSV · PDF de Brubank/Galicia · XLSX de Galicia.<br>Se importan automáticamente sin duplicados.</div>
     <div class="upload-tags">
       <span class="upload-tag accent">CSV Sheets</span>
       <span class="upload-tag accent">PDF Brubank</span>
@@ -3253,7 +3253,7 @@ function parseGaliciaExtract(rows, headerIdx) {
   const pAR = s => {
     if (!s && s !== 0) return 0;
     if (typeof s === 'number') return s;
-    const c = String(s).replace(/[^\d.,-]/g,'').replace('.','').replace(',','.');
+    const c = String(s).replace(/[^\d.,-]/g,'').replace(/\./g,'').replace(',','.');
     return parseFloat(c) || 0;
   };
   for (let i = headerIdx + 1; i < rows.length; i++) {
@@ -3265,9 +3265,15 @@ function parseGaliciaExtract(rows, headerIdx) {
     const y = m[3].length===2 ? 2000+parseInt(m[3]) : parseInt(m[3]);
     const pd = new Date(y, parseInt(m[2])-1, parseInt(m[1]));
     if (isNaN(pd.getTime())) continue;
-    // Movimiento column is multiline — first line is the description
+    // Movimiento column is multiline — first line is type, second is name/detail
     const movimiento = String(row[1]||'').trim();
-    const desc = movimiento.split('\n')[0].trim().replace(/^\s*/, '');
+    const movLines = movimiento.split('\n').map(l => l.trim()).filter(Boolean);
+    // Use first 2 lines for a better description (e.g. "TRANSFERENCIA A TERCEROS - Maria Fernanda Bollati")
+    let desc = movLines[0] || '';
+    if (movLines.length > 1 && !/^\d{11,}$/.test(movLines[1]) && !/^CU\s/.test(movLines[1])) {
+      desc = movLines[0] + ' - ' + movLines[1];
+    }
+    desc = desc.trim();
     if (!desc) continue;
     const debito  = pAR(row[2]);  // negative = gasto
     const credito = pAR(row[3]);  // positive = ingreso
