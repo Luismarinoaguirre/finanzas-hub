@@ -3597,7 +3597,7 @@ function parseBrubankPDF(lines) {
   }
 
   // Debit account format (original parser)
-  const amtP = '(\\$[\\d.,]+|U\\$S[\\s\\d.,]+|-)';
+  const amtP = '(\\$\\s*[\\d.,]+|U\\$S\\s*[\\d.,]+|-)';
   const rowRe = new RegExp('^(\\d{2}-\\d{2}-\\d{2,4})\\s+(\\d{6,12})\\s+(.+?)\\s+' + amtP + '\\s+' + amtP + '(?:\\s+' + amtP + ')?$');
   for (const line of lines) {
     if (line.includes('Pesos (ARS)')) currency = 'ARS';
