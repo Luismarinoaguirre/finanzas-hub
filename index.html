@@ -541,10 +541,16 @@ tr:hover td { background: rgba(255,255,255,0.025); }
   letter-spacing: 0.1px;
   white-space: nowrap;
 }
-.status-cobrado { background: rgba(52,211,153,0.12); color: var(--green); border: 1px solid rgba(52,211,153,0.2); }
-.status-pagado { background: rgba(59,130,246,0.12); color: var(--blue-light); border: 1px solid rgba(59,130,246,0.2); }
-.status-a-cobrar { background: rgba(251,146,60,0.12); color: var(--orange); border: 1px solid rgba(251,146,60,0.2); }
-.status-a-pagar { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+.status-dot { display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle; }
+.status-dot.dot-pagado { background:#22C55E; box-shadow:0 0 6px #22C55E66; }
+.status-dot.dot-cobrado { background:#34D399; box-shadow:0 0 6px #34D39966; }
+.status-dot.dot-a-cobrar { background:#FB923C; box-shadow:0 0 6px #FB923C66; }
+.status-dot.dot-a-pagar { background:#F87171; box-shadow:0 0 6px #F8717166; }
+.status-label { display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600; }
+.status-label.sl-pagado { color:#22C55E; }
+.status-label.sl-cobrado { color:#34D399; }
+.status-label.sl-a-cobrar { color:#FB923C; }
+.status-label.sl-a-pagar { color:#F87171; }
 
 /* ═══════════════════════════
    CREDIT CARDS SECTION
@@ -1233,8 +1239,9 @@ tr:hover td { background: rgba(255,255,255,0.025); }
             <th>Descripción</th>
             <th>Categoría</th>
             <th>Banco/TC</th>
-            <th>Acción</th>
+            <th>Estado</th>
             <th style="text-align:right;">Monto</th>
+            <th>Compartido</th>
             <th style="text-align:center;">Cuotas</th>
             <th></th>
           </tr>
@@ -1909,7 +1916,7 @@ tr:hover td { background: rgba(255,255,255,0.025); }
       </div>
       <div class="input-group">
         <div class="input-label">Monto</div>
-        <input type="number" class="input-field" id="txn-amount" placeholder="0">
+        <input type="number" class="input-field" id="txn-amount" placeholder="0" oninput="updateSharedPreview()">
       </div>
       <div class="input-group">
         <div class="input-label">Moneda</div>
@@ -1960,11 +1967,18 @@ tr:hover td { background: rgba(255,255,255,0.025); }
         <div class="input-label">Gasto compartido</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-secondary);">
-            <input type="checkbox" id="txn-shared" onchange="document.getElementById('txn-shared-with').style.display=this.checked?'block':'none'" style="width:18px;height:18px;accent-color:var(--blue);">
+            <input type="checkbox" id="txn-shared" onchange="toggleSharedFields()" style="width:18px;height:18px;accent-color:var(--blue);">
             Compartido
           </label>
         </div>
-        <input type="text" class="input-field" id="txn-shared-with" placeholder="¿Con quién? (ej: Juan, María)" style="display:none;margin-top:8px;">
+        <div id="txn-shared-fields" style="display:none;margin-top:8px;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <input type="number" class="input-field" id="txn-shared-count" placeholder="Dividir entre" min="2" value="2" style="flex:1;" onchange="updateSharedPreview()">
+            <span style="color:var(--text-secondary);font-size:12px;">personas</span>
+          </div>
+          <input type="text" class="input-field" id="txn-shared-with" placeholder="Nombres (ej: Juan, María)" style="margin-bottom:8px;">
+          <div id="txn-shared-preview" style="font-size:12px;color:var(--text-secondary);padding:8px;background:var(--glass-bg);border-radius:8px;display:none;"></div>
+        </div>
       </div>
     </div>
     <div class="modal-actions">
@@ -2596,7 +2610,9 @@ function openNewTxn(id) {
   document.getElementById('txn-cuota-total').value = txn ? (txn.cuotaTotal || '') : '';
   document.getElementById('txn-shared').checked = txn ? (txn.shared || false) : false;
   document.getElementById('txn-shared-with').value = txn ? (txn.sharedWith || '') : '';
-  document.getElementById('txn-shared-with').style.display = (txn && txn.shared) ? 'block' : 'none';
+  document.getElementById('txn-shared-count').value = txn ? (txn.sharedCount || 2) : 2;
+  document.getElementById('txn-shared-fields').style.display = (txn && txn.shared) ? 'block' : 'none';
+  if (txn && txn.shared) setTimeout(updateSharedPreview, 50);
   catSel.value = txn ? txn.category : state.categories[0];
 
   openModal('modal-txn');
@@ -2624,6 +2640,8 @@ function saveTxn() {
     cuotaTotal: parseInt(document.getElementById('txn-cuota-total').value) || null,
     shared: document.getElementById('txn-shared').checked,
     sharedWith: document.getElementById('txn-shared').checked ? document.getElementById('txn-shared-with').value.trim() : '',
+    sharedCount: document.getElementById('txn-shared').checked ? (parseInt(document.getElementById('txn-shared-count').value) || 2) : null,
+    sharedPerPerson: document.getElementById('txn-shared').checked ? (amount / (parseInt(document.getElementById('txn-shared-count').value) || 2)) : null,
     month: getMonthKey(date),
     week: getWeekKey(date),
   };
@@ -2657,6 +2675,25 @@ function saveTxn() {
   renderDashboard();
   updateSidebarBalance();
   showDashContent();
+}
+
+// ═══════════════════════════════════════════════
+//  SHARED EXPENSE HELPERS
+// ═══════════════════════════════════════════════
+function toggleSharedFields() {
+  const checked = document.getElementById('txn-shared').checked;
+  document.getElementById('txn-shared-fields').style.display = checked ? 'block' : 'none';
+  if (checked) updateSharedPreview();
+}
+function updateSharedPreview() {
+  const amt = parseFloat(document.getElementById('txn-amount')?.value) || 0;
+  const count = parseInt(document.getElementById('txn-shared-count')?.value) || 2;
+  const preview = document.getElementById('txn-shared-preview');
+  if (!amt || count < 2) { preview.style.display = 'none'; return; }
+  const each = amt / count;
+  const othersPay = amt - each;
+  preview.style.display = 'block';
+  preview.innerHTML = `💰 Total: <strong>$${fmtN(amt)}</strong> ÷ ${count} = <strong>$${fmtN(each)}</strong> c/u<br>👤 Vos pagás: <strong>$${fmtN(each)}</strong> · Te deben: <strong style="color:var(--green)">$${fmtN(othersPay)}</strong>`;
 }
 
 // ═══════════════════════════════════════════════
@@ -4325,7 +4362,7 @@ function renderTxnPage(txns) {
   const page = txns.slice(start, start + TXN_PAGE_SIZE);
   const tbody = document.getElementById('txn-tbody');
   if (!page.length) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">Sin movimientos</div><div class="empty-sub">Importá un CSV o cargá manualmente.</div></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">Sin movimientos</div><div class="empty-sub">Importá un CSV o cargá manualmente.</div></div></td></tr>';
     document.getElementById('txn-pagination').innerHTML = '';
     return;
   }
@@ -4339,11 +4376,12 @@ function renderTxnPage(txns) {
     const amtCls = ['A COBRAR','COBRADO'].includes(status) ? 'positive' : '';
     return `<tr>
       <td style="color:var(--text-tertiary);font-size:12px;">${dateStr}</td>
-      <td class="td-desc">${esc(t.description)}${t.shared ? ' <span style="font-size:10px;color:var(--purple);font-weight:600;" title="'+(t.sharedWith||'Compartido')+'">👥</span>' : ''}</td>
+      <td class="td-desc">${esc(t.description)}</td>
       <td><span class="badge" style="background:${catColor(t.category||'Otros')}22;color:${catColor(t.category||'Otros')};border:1px solid ${catColor(t.category||'Otros')}33;">${esc(t.category||'Otros')}</span></td>
       <td style="font-size:12px;">${tc?`<span style="color:${tc.color||'var(--blue-light)'};font-weight:600;">💳 ${esc(tc.name)}</span>`:esc(t.bank||'—')}</td>
-      <td><span class="badge status-${statusCls}">${esc(status)}</span></td>
+      <td><span class="status-label sl-${statusCls}" title="${esc(status)}"><span class="status-dot dot-${statusCls}"></span>${status==='PAGADO'?'Pagado':status==='COBRADO'?'Cobrado':status==='A COBRAR'?'A cobrar':'A pagar'}</span></td>
       <td class="td-amount ${amtCls}">${['A COBRAR','COBRADO'].includes(status)?'+':''}${fmtM(t.amount,t.currency)}</td>
+      <td style="font-size:11px;">${t.shared ? `<span style="color:var(--purple);">👥 ÷${t.sharedCount||2}</span><br><span style="color:var(--green);font-weight:600;">Te deben $${fmtN(t.amount - (t.sharedPerPerson || t.amount/(t.sharedCount||2)))}</span>` : '<span style="color:var(--text-tertiary);">—</span>'}</td>
       <td style="text-align:center;font-size:12px;color:var(--text-tertiary);">${cuotaStr}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-glass btn-icon btn-sm" onclick="openNewTxn('${t.id}')" title="Editar">✎</button>
@@ -4438,18 +4476,25 @@ function renderTarjetas() {
     tcTotalSub.textContent = 'Agregá tus tarjetas en Configuración';
     tcChips.innerHTML = '';
   } else {
-    let grandTotal = 0;
+    let grandTotalARS = 0, grandTotalUSD = 0;
     const chipHTMLs = [];
     state.creditCards.forEach(tc => {
-      const tcTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='ARS');
-      const total = tcTxns.reduce((s,t)=>s+t.amount,0);
-      grandTotal += total;
+      const arsTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='ARS');
+      const usdTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='USD');
+      const totalARS = arsTxns.reduce((s,t)=>s+t.amount,0);
+      const totalUSD = usdTxns.reduce((s,t)=>s+t.amount,0);
+      grandTotalARS += totalARS;
+      grandTotalUSD += totalUSD;
+      let amtHtml = `$${fmtN(totalARS)}`;
+      if (totalUSD > 0) amtHtml += `<div style="font-size:11px;color:var(--green);margin-top:2px;">US$ ${fmtN(totalUSD)}</div>`;
       chipHTMLs.push(`<div class="tcb-card-chip">
         <div class="tcb-chip-name" style="color:${tc.color}">${esc(tc.name)}</div>
-        <div class="tcb-chip-amount">$${fmtN(total)}</div>
+        <div class="tcb-chip-amount">${amtHtml}</div>
       </div>`);
     });
-    tcTotal.textContent = '$' + fmtN(grandTotal);
+    let totalHtml = '$' + fmtN(grandTotalARS);
+    if (grandTotalUSD > 0) totalHtml += ` <span style="font-size:16px;color:var(--green);font-weight:500;">+ US$ ${fmtN(grandTotalUSD)}</span>`;
+    tcTotal.innerHTML = totalHtml;
     tcTotalSub.textContent = state.creditCards.length + ' tarjeta' + (state.creditCards.length!==1?'s':'') + ' · ' + monthTxns.length + ' movimiento' + (monthTxns.length!==1?'s':'');
     tcChips.innerHTML = chipHTMLs.join('');
   }
@@ -4460,17 +4505,21 @@ function renderTarjetas() {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">💳</div><div class="empty-title">Sin tarjetas</div><div class="empty-sub">Agregá tus tarjetas en Configuración.</div></div>';
   } else {
     grid.innerHTML = state.creditCards.map(tc => {
-      const tcTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='ARS');
-      const total = tcTxns.reduce((s,t)=>s+t.amount,0);
-      const pct = tc.limit > 0 ? Math.round(total/tc.limit*100) : null;
+      const arsTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='ARS');
+      const usdTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='USD');
+      const totalARS = arsTxns.reduce((s,t)=>s+t.amount,0);
+      const totalUSD = usdTxns.reduce((s,t)=>s+t.amount,0);
+      const allTxns = monthTxns.filter(t=>t.tcId===tc.id);
+      const pct = tc.limit > 0 ? Math.round(totalARS/tc.limit*100) : null;
       const typeEmoji = {VISA:'💳',MASTERCARD:'💳',AMEX:'💎',NARANJA:'🟠',OTRO:'💳'}[tc.type]||'💳';
       return `<div class="glass-card tc-card" style="position:relative;">
         <div class="tc-card-shimmer" style="background:linear-gradient(135deg,${tc.color}12 0%,transparent 60%)"></div>
         <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${tc.color};border-radius:2px 2px 0 0;"></div>
         <div class="tc-card-name" style="color:${tc.color}">${esc(tc.name)}</div>
-        <div class="tc-card-amount">$${fmtN(total)}</div>
+        <div class="tc-card-amount">$${fmtN(totalARS)}</div>
+        ${totalUSD > 0 ? `<div style="font-size:14px;color:var(--green);font-weight:600;margin-top:2px;">US$ ${fmtN(totalUSD)}</div>` : ''}
         <div class="tc-card-limit-row">
-          <div class="tc-card-limit">${tc.limit>0?'Límite: $'+fmtN(tc.limit):'Sin límite'} · ${tcTxns.length} mov.</div>
+          <div class="tc-card-limit">${tc.limit>0?'Límite: $'+fmtN(tc.limit):'Sin límite'} · ${allTxns.length} mov.</div>
           ${pct!==null?`<div class="tc-card-pct" style="color:${pct>=90?'var(--red)':pct>=70?'var(--orange)':'var(--green)'}">${pct}%</div>`:''}
         </div>
         ${tc.limit>0?`<div class="tc-bar"><div class="tc-bar-fill" style="width:${Math.min(100,pct||0)}%;background:${(pct||0)>=90?'var(--red)':(pct||0)>=70?'var(--orange)':tc.color}"></div></div>`:''}
