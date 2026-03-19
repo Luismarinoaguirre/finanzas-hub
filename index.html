@@ -2977,73 +2977,55 @@ function confirmImport() {
 let _pendingTxns = [];
 
 async function syncGoogleSheets() {
-  const url = state.gsheetsUrl;
-  if (!url) {
-    showToast('Configurá la URL de Google Sheets en Configuración', 'error');
+  if (!CLOUD_SYNC_URL) {
+    showToast('Configurá Cloud Sync primero', 'error');
     return;
   }
-  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (!match) {
-    showToast('URL de Google Sheets inválida', 'error');
-    return;
-  }
-  const sheetId = match[1];
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
 
   const btn = document.getElementById('sync-btn');
   btn.disabled = true;
   btn.innerHTML = '↻ Sincronizando…';
 
   try {
-    const res = await fetch(csvUrl);
-    if (!res.ok) throw new Error('No se pudo acceder a la sheet. Verificá que esté compartida como pública.');
-    const csv = await res.text();
-    const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
-    if (!parsed.data.length) {
-      showToast('La sheet está vacía', 'error');
+    const res = await fetch(CLOUD_SYNC_URL + '?action=get_pending');
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { throw new Error('Respuesta inválida del servidor'); }
+
+    const pending = data.pending || [];
+    if (!pending.length) {
+      _pendingTxns = [];
+      renderPending();
+      showToast('No hay gastos nuevos pendientes');
       btn.disabled = false; btn.innerHTML = '↻ Sincronizar';
+      updatePendingBadge();
       return;
     }
 
-    const processed = state.processedSheetRows || [];
-    const txns = [];
-    parsed.data.forEach((row, i) => {
-      const fecha = row.fecha || row.Fecha || '';
-      const desc = (row.descripcion || row.Descripcion || row.descripción || '').trim();
-      const monto = parseFloat((row.monto || row.Monto || '0').toString().replace(/\./g, '').replace(',', '.'));
-      const moneda = (row.moneda || row.Moneda || 'ARS').toUpperCase();
-      const banco = row.banco || row.Banco || '';
-      const tipo = (row.tipo || row.Tipo || 'gasto').toLowerCase();
-
-      if (!desc || !monto || !fecha) return;
-
-      const rowKey = fecha + '-' + desc.toLowerCase() + '-' + monto;
-      if (processed.includes(rowKey)) return;
-
-      const date = parseDate(fecha);
-      if (!date) return;
-
+    const txns = pending.map(p => {
+      const date = parseDate(p.date) || new Date();
+      const tipo = (p.type || 'gasto').toLowerCase();
       const status = tipo === 'ingreso' ? 'COBRADO' : 'PAGADO';
+      const desc = (p.description || '').toUpperCase();
       const cat = auto_cat(desc) || ruleBasedCategory(desc);
-
-      txns.push({
+      return {
         id: uid(),
         date,
-        description: desc.toUpperCase(),
-        amount: monto,
-        currency: moneda,
+        description: desc,
+        amount: parseFloat(p.amount) || 0,
+        currency: (p.currency || 'ARS').toUpperCase(),
         category: cat,
         status,
-        bank: banco,
+        bank: p.bank || '',
         tcId: '',
         empresa: '',
         cuotaNum: null,
         cuotaTotal: null,
         month: getMonthKey(date),
         week: getWeekKey(date),
-        _rowKey: rowKey,
+        _pendingId: p.id,
         _tipo: tipo,
-      });
+      };
     });
 
     // Deduplicate against existing transactions
@@ -3065,6 +3047,18 @@ async function syncGoogleSheets() {
   updatePendingBadge();
 }
 
+async function clearPendingFromCloud(ids) {
+  if (!CLOUD_SYNC_URL || !ids.length) return;
+  try {
+    await fetch(CLOUD_SYNC_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'clear_pending', ids })
+    });
+  } catch (e) { console.warn('clearPendingFromCloud error:', e); }
+}
+
 function renderPending() {
   const empty = document.getElementById('pending-empty');
   const content = document.getElementById('pending-content');
@@ -3075,7 +3069,7 @@ function renderPending() {
     empty.style.display = '';
     content.style.display = 'none';
     document.getElementById('pending-empty-msg').textContent =
-      state.gsheetsUrl ? 'No hay gastos nuevos. Pulsá Sincronizar para verificar.' : 'Configurá tu Google Sheet en Configuración y pulsá Sincronizar';
+      CLOUD_SYNC_URL ? 'No hay gastos nuevos. Pulsá Sincronizar para verificar.' : 'Configurá Cloud Sync para recibir gastos automáticos';
     return;
   }
 
@@ -3112,13 +3106,14 @@ function approvePending(idx) {
   const txn = _pendingTxns[idx];
   if (!txn) return;
   const clean = { ...txn };
+  const pendingId = clean._pendingId;
+  delete clean._pendingId;
   delete clean._rowKey;
   delete clean._tipo;
   state.transactions.push(clean);
-  if (!state.processedSheetRows) state.processedSheetRows = [];
-  state.processedSheetRows.push(txn._rowKey);
   _pendingTxns.splice(idx, 1);
   saveState();
+  if (pendingId) clearPendingFromCloud([pendingId]);
   renderPending();
   updatePendingBadge();
   renderDashboard();
@@ -3129,10 +3124,9 @@ function approvePending(idx) {
 function rejectPending(idx) {
   const txn = _pendingTxns[idx];
   if (!txn) return;
-  if (!state.processedSheetRows) state.processedSheetRows = [];
-  state.processedSheetRows.push(txn._rowKey);
+  const pendingId = txn._pendingId;
   _pendingTxns.splice(idx, 1);
-  saveState();
+  if (pendingId) clearPendingFromCloud([pendingId]);
   renderPending();
   updatePendingBadge();
   showToast('Movimiento rechazado');
@@ -3141,17 +3135,19 @@ function rejectPending(idx) {
 function approveAllPending() {
   if (!_pendingTxns.length) return;
   if (!confirm(`¿Aprobar ${_pendingTxns.length} movimiento(s)?`)) return;
-  if (!state.processedSheetRows) state.processedSheetRows = [];
+  const ids = [];
   _pendingTxns.forEach(txn => {
     const clean = { ...txn };
+    if (clean._pendingId) ids.push(clean._pendingId);
+    delete clean._pendingId;
     delete clean._rowKey;
     delete clean._tipo;
     state.transactions.push(clean);
-    state.processedSheetRows.push(txn._rowKey);
   });
   const count = _pendingTxns.length;
   _pendingTxns = [];
   saveState();
+  if (ids.length) clearPendingFromCloud(ids);
   renderPending();
   updatePendingBadge();
   renderDashboard();
@@ -3162,10 +3158,9 @@ function approveAllPending() {
 function rejectAllPending() {
   if (!_pendingTxns.length) return;
   if (!confirm(`¿Rechazar ${_pendingTxns.length} movimiento(s)?`)) return;
-  if (!state.processedSheetRows) state.processedSheetRows = [];
-  _pendingTxns.forEach(txn => state.processedSheetRows.push(txn._rowKey));
+  const ids = _pendingTxns.filter(t => t._pendingId).map(t => t._pendingId);
   _pendingTxns = [];
-  saveState();
+  if (ids.length) clearPendingFromCloud(ids);
   renderPending();
   updatePendingBadge();
   showToast('Movimientos rechazados');
