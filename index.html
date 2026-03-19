@@ -4263,27 +4263,35 @@ function updateSidebarBalance() {
 function populateFilters() {
   const months = allMonths();
   const fMonth = document.getElementById('filter-month');
+  const prevMonth = fMonth?.value;
   fMonth.innerHTML = '<option value="">Todos los meses</option>' +
     months.map(m => { const [y,mo]=m.split('-').map(Number); return `<option value="${m}">${MNAMES[mo-1]} ${y}</option>`; }).join('');
+  if (prevMonth) fMonth.value = prevMonth;
 
   const fCat = document.getElementById('filter-cat');
+  const prevCat = fCat?.value;
   const cats = [...new Set(state.transactions.map(t=>t.category||'Otros'))]
     .filter(c => c && isNaN(c) && !/^\$?\d[\d.,]*$/.test(c.trim()))
     .sort();
   fCat.innerHTML = '<option value="">Todas las categorías</option>' +
     cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  if (prevCat) fCat.value = prevCat;
 
-  // Also fill TC filter on tarjetas page
+  // Also fill TC filter on tarjetas page – preserve selection
   const tcFilter = document.getElementById('tc-detail-filter');
   if (tcFilter) {
+    const prevTcFilter = tcFilter.value;
     tcFilter.innerHTML = '<option value="">Todas las tarjetas</option>' +
       state.creditCards.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    if (prevTcFilter) tcFilter.value = prevTcFilter;
   }
-  // TC month select
+  // TC month select – preserve current selection
   const tcMonthSel = document.getElementById('tc-month-select');
   if (tcMonthSel) {
+    const prevTcMonth = tcMonthSel.value;
     tcMonthSel.innerHTML = '<option value="">Mes actual</option>' +
       months.map(m => { const [y,mo]=m.split('-').map(Number); return `<option value="${m}">${MNAMES[mo-1]} ${y}</option>`; }).join('');
+    if (prevTcMonth) tcMonthSel.value = prevTcMonth;
   }
 }
 
