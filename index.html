@@ -3088,15 +3088,38 @@ function renderPending() {
     const catOptions = state.categories.map(c =>
       `<option value="${c}" ${c === t.category ? 'selected' : ''}>${c}</option>`
     ).join('');
-    return `<div class="pending-card">
-      <div class="pending-card-info">
-        <div class="pending-card-desc">${t.description}</div>
-        <div class="pending-card-meta">${d} · ${t.bank || 'Sin banco'} · <select class="txn-select" style="font-size:11px;padding:2px 6px;" onchange="_pendingTxns[${i}].category=this.value">${catOptions}</select></div>
+    const statusOptions = ['PAGADO','COBRADO','A COBRAR','A PAGAR'].map(s =>
+      `<option value="${s}" ${s===(t.status||'PAGADO')?'selected':''}>${s}</option>`
+    ).join('');
+    return `<div class="pending-card" style="flex-wrap:wrap;">
+      <div class="pending-card-info" style="width:100%;display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <input class="input-field" style="flex:1;font-size:13px;padding:6px 10px;" value="${esc(t.description)}" onchange="_pendingTxns[${i}].description=this.value" title="Descripción">
+        <input type="number" class="input-field" style="width:110px;font-size:13px;padding:6px 10px;text-align:right;color:${amountColor};font-weight:700;" value="${t.amount}" onchange="_pendingTxns[${i}].amount=parseFloat(this.value)||0" title="Monto">
       </div>
-      <div class="pending-card-amount" style="color:${amountColor}">${sign}$${t.amount.toLocaleString('es-AR')}</div>
-      <div class="pending-card-actions">
-        <button class="btn btn-glass" style="padding:6px 10px;font-size:12px;" onclick="rejectPending(${i})" title="Rechazar">✕</button>
-        <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="approvePending(${i})" title="Aprobar">✓</button>
+      <div style="width:100%;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <select class="txn-select" style="font-size:11px;padding:4px 6px;" onchange="_pendingTxns[${i}].category=this.value" title="Categoría">${catOptions}</select>
+        <select class="txn-select" style="font-size:11px;padding:4px 6px;" onchange="_pendingTxns[${i}].status=this.value" title="Estado">${statusOptions}</select>
+        <span style="font-size:11px;color:var(--text-tertiary);">${t.bank || 'Sin banco'}</span>
+        <span style="font-size:11px;color:var(--text-tertiary);">·</span>
+        <span style="font-size:11px;color:var(--text-tertiary);">${d}</span>
+      </div>
+      <div style="width:100%;display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-secondary);">
+          <input type="checkbox" ${t.shared?'checked':''} onchange="_pendingTxns[${i}].shared=this.checked;renderPending()" style="width:16px;height:16px;accent-color:var(--purple);">
+          👥 Compartido
+        </label>
+        ${t.shared ? `
+          <input type="number" class="input-field" style="width:60px;font-size:11px;padding:4px 6px;" value="${t.sharedCount||2}" min="2" onchange="_pendingTxns[${i}].sharedCount=parseInt(this.value)||2;renderPending()" placeholder="÷" title="Dividir entre">
+          <span style="font-size:11px;color:var(--text-secondary);">personas</span>
+          <input class="input-field" style="flex:1;font-size:11px;padding:4px 6px;" value="${esc(t.sharedWith||'')}" onchange="_pendingTxns[${i}].sharedWith=this.value" placeholder="Nombres (ej: Juan, María)">
+        ` : ''}
+      </div>
+      ${t.shared ? `<div style="width:100%;font-size:11px;color:var(--text-secondary);padding:6px 10px;background:var(--glass-bg);border-radius:6px;margin-bottom:8px;">
+        💰 $${fmtN(t.amount)} ÷ ${t.sharedCount||2} = <strong>$${fmtN(t.amount/(t.sharedCount||2))}</strong> c/u · Te deben: <strong style="color:var(--green)">$${fmtN(t.amount - t.amount/(t.sharedCount||2))}</strong>
+      </div>` : ''}
+      <div style="width:100%;display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-glass" style="padding:6px 14px;font-size:12px;" onclick="rejectPending(${i})">✕ Rechazar</button>
+        <button class="btn btn-primary" style="padding:6px 14px;font-size:12px;" onclick="approvePending(${i})">✓ Aprobar</button>
       </div>
     </div>`;
   }).join('');
@@ -3110,6 +3133,10 @@ function approvePending(idx) {
   delete clean._pendingId;
   delete clean._rowKey;
   delete clean._tipo;
+  // Shared expense calculations
+  if (clean.shared && clean.sharedCount > 1) {
+    clean.sharedPerPerson = clean.amount / clean.sharedCount;
+  }
   state.transactions.push(clean);
   _pendingTxns.splice(idx, 1);
   saveState();
