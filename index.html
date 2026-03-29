@@ -68,9 +68,8 @@
 
   /* Semantic surfaces */
   --sidebar-bg: #ffffff;
-  --modal-bg: rgba(255,255,255,0.97);
-  --modal-shadow: 0 24px 64px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.06);
-  --toast-bg: rgba(255,255,255,0.97);
+  --sidebar-border: rgba(0,0,0,0.08);
+  --sidebar-backdrop: none;
   --track-bg: rgba(0,0,0,0.06);
   --divider: rgba(0,0,0,0.06);
   --hover-bg: rgba(0,0,0,0.03);
@@ -104,6 +103,14 @@
   /* Typography - SF Pro style */
   --font: -apple-system, 'SF Pro Display', 'Inter', BlinkMacSystemFont, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', monospace;
+  --font-tiny: 10px;
+  --font-xs: 12px;
+  --font-sm: 14px;
+  --font-base: 15px;
+  --font-lg: 18px;
+  --font-xl: 24px;
+  --font-2xl: 32px;
+  --font-3xl: 44px;
 }
 
 /* ── DARK MODE ── */
@@ -141,6 +148,8 @@
   --text-caption: rgba(255,255,255,0.22);
 
   --sidebar-bg: rgba(12,15,22,0.7);
+  --sidebar-border: transparent;
+  --sidebar-backdrop: var(--glass-blur);
   --modal-bg: rgba(20,24,36,0.92);
   --modal-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
   --toast-bg: rgba(20,24,36,0.95);
@@ -222,10 +231,10 @@ body::after {
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--sidebar-backdrop);
+  -webkit-backdrop-filter: var(--sidebar-backdrop);
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--glass-border);
+  border-right: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
   padding: 24px 14px 20px;
@@ -738,6 +747,37 @@ tr:hover td { background: var(--hover-bg); }
   animation: modalIn 0.25s cubic-bezier(0.4,0,0.2,1);
 }
 @keyframes modalIn { from { opacity:0; transform: scale(0.95) translateY(12px); } to { opacity:1; transform: scale(1) translateY(0); } }
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* Skeletons & Empty States */
+.skeleton { position: relative; overflow: hidden; background: var(--track-bg); border-radius: 4px; }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0;
+  background: var(--shimmer-bg);
+  animation: shimmer 1.5s infinite linear;
+}
+.skeleton-text { height: 14px; margin-bottom: 8px; border-radius: 4px; }
+.skeleton-card { height: 120px; border-radius: 12px; }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 20px; text-align: center;
+}
+.empty-icon { width: 48px; height: 48px; opacity: 0.2; margin-bottom: 16px; }
+.empty-title { font-size: var(--font-base); font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.empty-desc { font-size: var(--font-sm); color: var(--text-secondary); max-width: 250px; line-height: 1.5; margin-bottom: 20px; }
+
+/* Forms & Validation */
+.input-error { border-color: var(--red) !important; animation: shake 0.4s ease-in-out; }
+.error-message { font-size: var(--font-xs); color: var(--red); margin-top: 4px; display: none; }
 .modal::-webkit-scrollbar { width: 4px; }
 .modal::-webkit-scrollbar-track { background: transparent; }
 .modal::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 2px; }
