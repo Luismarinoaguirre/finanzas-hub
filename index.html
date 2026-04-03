@@ -1413,7 +1413,7 @@ tr:hover td { background: var(--table-hover); }
         <option value="">Mes actual</option>
       </select>
       <button class="btn btn-glass" onclick="openNewTxn()">＋ Cargar</button>
-      <button class="btn btn-primary" onclick="document.getElementById('csvInput').click()">↑ Importar CSV</button>
+      <button class="btn btn-primary" onclick="document.getElementById('csvInput').click()">↑ Subir Archivo</button>
       <button class="btn" id="cloud-sync-btn" onclick="cloudSyncFull()" style="background:var(--blue);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;margin-left:6px;">☁ Sync</button>
     </div>
   </div>
@@ -3900,6 +3900,19 @@ function processXLSX(file) {
 
 function parseGaliciaExtract(rows, headerIdx) {
   const txns = [];
+  // Detect if this extract is in USD by checking rows before header
+  let extractCurrency = 'ARS';
+  for (let i = 0; i < headerIdx; i++) {
+    const rowText = (rows[i] || []).map(c => String(c||'').toUpperCase()).join(' ');
+    if (rowText.includes('DOLAR') || rowText.includes('USD') || rowText.includes('U$D') || rowText.includes('DOLARES')) {
+      extractCurrency = 'USD';
+      break;
+    }
+  }
+  // Also check header row for currency hints
+  const headerText = (rows[headerIdx] || []).map(c => String(c||'').toUpperCase()).join(' ');
+  if (headerText.includes('DOLAR') || headerText.includes('USD')) extractCurrency = 'USD';
+
   const pAR = s => {
     if (!s && s !== 0) return 0;
     if (typeof s === 'number') return s;
@@ -3924,9 +3937,13 @@ function parseGaliciaExtract(rows, headerIdx) {
     const isGasto = debito < 0;
     const amount  = isGasto ? Math.abs(debito) : credito;
     if (!amount) continue;
+    // Per-row currency detection: check if description mentions USD
+    const descUp = desc.toUpperCase();
+    const rowCurrency = (descUp.includes('U$D') || descUp.includes('USD ') || descUp.includes('DOLAR'))
+      ? 'USD' : extractCurrency;
     txns.push({
       id: uid(), date: pd, description: desc, amount: Math.round(amount*100)/100,
-      currency: 'ARS', category: auto_cat(desc),
+      currency: rowCurrency, category: auto_cat(desc),
       status: isGasto ? 'PAGADO' : 'COBRADO',
       bank: 'Galicia', tcId: '', empresa: '', cuotaNum: null, cuotaTotal: null,
       month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
@@ -4006,7 +4023,15 @@ function parseXLSXRows(rows) {
     if (!amount) continue;
     let currency = 'ARS';
     if (cols.moneda !== undefined) {
-      if (String(row[cols.moneda]||'').toUpperCase().includes('USD')) currency = 'USD';
+      const monVal = String(row[cols.moneda]||'').toUpperCase();
+      if (monVal.includes('USD') || monVal.includes('U$D') || monVal.includes('DOLAR') || monVal.includes('DÓLAR')) currency = 'USD';
+    } else {
+      // Auto-detect USD from description or bank name
+      const descUp = desc.toUpperCase();
+      const allCols = row.map(c => String(c||'').toUpperCase()).join(' ');
+      if (descUp.includes('U$D') || descUp.includes('USD ') || descUp.includes('DOLAR ') ||
+          allCols.includes('DOLAR') || allCols.includes('U$D') ||
+          /\bUSD\b/.test(allCols)) currency = 'USD';
     }
     const bancoRaw = cols.banco !== undefined ? String(row[cols.banco]||'').trim().toLowerCase() : '';
     const tcId = TC_ALIASES[bancoRaw] || '';
@@ -4447,6 +4472,7 @@ function parseGenericCSV(rows) {
   const iBanco = col('banco') >= 0 ? col('banco') : col('medio');
   const iStatus = col('acci') >= 0 ? col('acci') : col('estado');
   const iTC = col('tarjeta') >= 0 ? col('tarjeta') : col(' tc');
+  const iMoneda = col('moneda') >= 0 ? col('moneda') : col('currency');
   const iCuotaN = col('cuota') >= 0 ? headers.findIndex(h => h.includes('cuota') && (h.includes('n') || h.includes('nr') || h.includes('#'))) : -1;
   const iCuotaT = headers.findIndex(h => h.includes('total') && h.includes('cuota'));
 
@@ -4464,8 +4490,19 @@ function parseGenericCSV(rows) {
     const usdRaw = iUSD >= 0 ? row[iUSD] : null;
     const ars = pN(arsRaw), usd = pN(usdRaw);
     if (ars <= 0 && usd <= 0) continue;
-    const currency = usd > 0 && ars === 0 ? 'USD' : 'ARS';
-    const amount = currency === 'USD' ? usd : ars;
+    let currency = usd > 0 && ars === 0 ? 'USD' : 'ARS';
+    // Check explicit moneda/currency column
+    if (iMoneda >= 0) {
+      const monVal = String(row[iMoneda]||'').toUpperCase();
+      if (monVal.includes('USD') || monVal.includes('U$D') || monVal.includes('DOLAR') || monVal.includes('DÓLAR')) currency = 'USD';
+      else if (monVal.includes('ARS') || monVal.includes('PESO')) currency = 'ARS';
+    }
+    // Auto-detect from description if no explicit column
+    if (iMoneda < 0 && iUSD < 0) {
+      const descUp = desc.toUpperCase();
+      if (descUp.includes('U$D') || descUp.includes('USD ') || /\bDOLAR\b/.test(descUp)) currency = 'USD';
+    }
+    const amount = currency === 'USD' ? (usd > 0 ? usd : ars) : ars;
     let cuotaNum = null, cuotaTotal = null;
     if (iCuotaN >= 0) { const m = String(row[iCuotaN]||'').match(/(\d+)/); if(m) cuotaNum = parseInt(m[1]); }
     if (iCuotaT >= 0) { const m = String(row[iCuotaT]||'').match(/(\d+)/); if(m) cuotaTotal = parseInt(m[1]); }
