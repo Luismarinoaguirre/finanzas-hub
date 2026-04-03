@@ -2498,7 +2498,7 @@ tr:hover td { background: var(--table-hover); }
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-glass" onclick="closeModal('modal-txn')">Cancelar</button>
+      <button class="btn btn-glass" onclick="cancelTxnModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveTxn()">Guardar</button>
     </div>
   </div>
@@ -3148,6 +3148,19 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // ═══════════════════════════════════════════════
 //  NEW TRANSACTION MODAL
 // ═══════════════════════════════════════════════
+function cancelTxnModal() {
+  closeModal('modal-txn');
+  // If editing an import txn, return to import modal
+  if (window._editingImportIdx != null) {
+    window._editingImportIdx = null;
+    document.getElementById('modal-import').classList.add('open');
+  }
+  // If editing a pending txn, stay on pending page
+  if (window._editingPendingIdx != null) {
+    window._editingPendingIdx = null;
+  }
+}
+
 function openNewTxn(id) {
   window._editingPendingIdx = null;
   window._editingImportIdx = null;
