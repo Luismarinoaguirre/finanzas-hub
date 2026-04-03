@@ -3150,6 +3150,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // ═══════════════════════════════════════════════
 function openNewTxn(id) {
   window._editingPendingIdx = null;
+  window._editingImportIdx = null;
   editingTxnId = id || null;
   const txn = id ? state.transactions.find(t => t.id === id) : null;
   
@@ -3261,6 +3262,21 @@ function saveTxn() {
     const idx = state.transactions.findIndex(t => t.id === editingTxnId);
     if (idx >= 0) state.transactions[idx] = txn;
     showToast('Movimiento actualizado');
+  } else if (window._editingImportIdx != null) {
+    // Editing a transaction inside the import review — update in place, return to import modal
+    const iIdx = window._editingImportIdx;
+    if (_importPending[iIdx]) {
+      _importPending[iIdx] = { ..._importPending[iIdx], ...txn };
+    }
+    window._editingImportIdx = null;
+    closeModal('modal-txn');
+    renderImportList();
+    const sinCat = _importPending.filter(t => !t.category).length;
+    document.getElementById('import-footer-note').textContent =
+      sinCat ? '⚠ ' + sinCat + ' movimientos sin categoría' : '✓ Todos los movimientos tienen categoría';
+    document.getElementById('modal-import').classList.add('open');
+    showToast('Movimiento actualizado');
+    return;
   } else if (window._editingPendingIdx != null) {
     // Approving a pending transaction after editing
     const pIdx = window._editingPendingIdx;
@@ -3448,7 +3464,8 @@ function renderImportList() {
       <div style="flex-shrink:0;">${catSelect}</div>
       <div style="font-size:13px;font-weight:600;color:${amtCol};white-space:nowrap;min-width:80px;text-align:right;">${amtSign}${t.currency==='USD'?'U$D ':'$'}${fmtN(t.amount)}</div>
       ${isDupeView?'':
-        `<button onclick="removeImportTxn(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Quitar">✕</button>`}
+        `<button onclick="editImportTxn(${realIdx})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Editar">✎</button>
+         <button onclick="removeImportTxn(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Quitar">✕</button>`}
     </div>`;
   }).join('');
 }
@@ -3466,6 +3483,40 @@ function removeImportTxn(idx) {
   _importPending.splice(idx, 1);
   document.getElementById('import-confirm-label').textContent = 'Confirmar ' + _importPending.length + ' movimientos';
   renderImportList();
+}
+
+function editImportTxn(idx) {
+  const txn = _importPending[idx];
+  if (!txn) return;
+  window._editingImportIdx = idx;
+
+  // Close import modal temporarily, open txn modal
+  document.getElementById('modal-import').classList.remove('open');
+
+  editingTxnId = null;
+  window._editingPendingIdx = null;
+  const catSel = document.getElementById('txn-cat');
+  catSel.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+  const tcSel = document.getElementById('txn-tc');
+  tcSel.innerHTML = '<option value="">— Sin tarjeta —</option>' +
+    state.creditCards.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  const d = txn.date instanceof Date ? txn.date : new Date(txn.date);
+  document.getElementById('txn-date').value = d instanceof Date && !isNaN(d) ? d.toISOString().split('T')[0] : '';
+  document.getElementById('txn-desc').value = txn.description || '';
+  document.getElementById('txn-amount').value = txn.amount || '';
+  document.getElementById('txn-currency').value = txn.currency || 'ARS';
+  document.getElementById('txn-status').value = txn.status || 'PAGADO';
+  document.getElementById('txn-bank').value = txn.bank || '';
+  document.getElementById('txn-tc').value = txn.tcId || '';
+  document.getElementById('txn-empresa').value = txn.empresa || '';
+  document.getElementById('txn-cuota-num').value = txn.cuotaNum || '';
+  document.getElementById('txn-cuota-total').value = txn.cuotaTotal || '';
+  catSel.value = txn.category || state.categories[0];
+  const sharedCb = document.getElementById('txn-shared');
+  sharedCb.checked = false;
+  toggleSharedExpense();
+  openModal('modal-txn');
 }
 
 function confirmImport() {
