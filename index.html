@@ -3149,6 +3149,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 //  NEW TRANSACTION MODAL
 // ═══════════════════════════════════════════════
 function openNewTxn(id) {
+  window._editingPendingIdx = null;
   editingTxnId = id || null;
   const txn = id ? state.transactions.find(t => t.id === id) : null;
   
@@ -3260,6 +3261,20 @@ function saveTxn() {
     const idx = state.transactions.findIndex(t => t.id === editingTxnId);
     if (idx >= 0) state.transactions[idx] = txn;
     showToast('Movimiento actualizado');
+  } else if (window._editingPendingIdx != null) {
+    // Approving a pending transaction after editing
+    const pIdx = window._editingPendingIdx;
+    const pending = _pendingTxns[pIdx];
+    if (pending) {
+      if (!state.processedSheetRows) state.processedSheetRows = [];
+      state.processedSheetRows.push(pending._rowKey);
+      _pendingTxns.splice(pIdx, 1);
+    }
+    state.transactions.push(txn);
+    window._editingPendingIdx = null;
+    renderPending();
+    updatePendingBadge();
+    showToast('Pendiente aprobado y guardado');
   } else {
     state.transactions.push(txn);
     showToast('Movimiento guardado');
@@ -3578,29 +3593,68 @@ function renderPending() {
   content.style.display = '';
 
   const arsTotal = _pendingTxns.filter(t => t.currency === 'ARS' && t._tipo === 'gasto').reduce((s, t) => s + t.amount, 0);
-  stats.innerHTML = `<strong>${_pendingTxns.length}</strong> pendiente(s)` +
-    (arsTotal ? ` · $${arsTotal.toLocaleString('es-AR')} ARS` : '');
+  const usdTotal = _pendingTxns.filter(t => t.currency === 'USD' && t._tipo === 'gasto').reduce((s, t) => s + t.amount, 0);
+  let statsText = `<strong>${_pendingTxns.length}</strong> pendiente(s)`;
+  if (arsTotal) statsText += ` · $${arsTotal.toLocaleString('es-AR')}`;
+  if (usdTotal) statsText += ` · U$D ${usdTotal.toLocaleString('es-AR')}`;
+  stats.innerHTML = statsText;
 
   list.innerHTML = _pendingTxns.map((t, i) => {
     const d = t.date instanceof Date ? t.date.toLocaleDateString('es-AR') : t.date;
     const isIngreso = t._tipo === 'ingreso';
     const amountColor = isIngreso ? 'var(--green)' : 'var(--text-primary)';
     const sign = isIngreso ? '+' : '';
+    const prefix = t.currency === 'USD' ? 'U$D ' : '$';
+    const curBadge = t.currency === 'USD'
+      ? '<span style="background:#34D399;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:6px;">USD</span>'
+      : '<span style="background:var(--glass-border);color:var(--text-secondary);font-size:10px;font-weight:600;padding:1px 6px;border-radius:6px;margin-left:6px;">ARS</span>';
     const catOptions = state.categories.map(c =>
       `<option value="${c}" ${c === t.category ? 'selected' : ''}>${c}</option>`
     ).join('');
     return `<div class="pending-card">
-      <div class="pending-card-info">
-        <div class="pending-card-desc">${t.description}</div>
-        <div class="pending-card-meta">${d} · ${t.bank || 'Sin banco'} · <select class="txn-select" style="font-size:11px;padding:2px 6px;" onchange="_pendingTxns[${i}].category=this.value">${catOptions}</select></div>
+      <div class="pending-card-info" style="flex:1;min-width:0;">
+        <div class="pending-card-desc" style="display:flex;align-items:center;gap:4px;">${esc(t.description)}${curBadge}</div>
+        <div class="pending-card-meta">${d} · ${esc(t.bank) || 'Sin banco'} · <select class="txn-select" style="font-size:11px;padding:2px 6px;" onchange="_pendingTxns[${i}].category=this.value">${catOptions}</select></div>
       </div>
-      <div class="pending-card-amount" style="color:${amountColor}">${sign}$${t.amount.toLocaleString('es-AR')}</div>
-      <div class="pending-card-actions">
+      <div class="pending-card-amount" style="color:${amountColor};white-space:nowrap;">${sign}${prefix}${t.amount.toLocaleString('es-AR')}</div>
+      <div class="pending-card-actions" style="display:flex;gap:4px;">
+        <button class="btn btn-glass" style="padding:6px 10px;font-size:12px;" onclick="editPending(${i})" title="Editar">✎</button>
         <button class="btn btn-glass" style="padding:6px 10px;font-size:12px;" onclick="rejectPending(${i})" title="Rechazar">✕</button>
         <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="approvePending(${i})" title="Aprobar">✓</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function editPending(idx) {
+  const txn = _pendingTxns[idx];
+  if (!txn) return;
+  // Store pending index so saveTxn can handle approval
+  window._editingPendingIdx = idx;
+  // Open the transaction modal pre-filled with pending data
+  editingTxnId = null;
+  const catSel = document.getElementById('txn-cat');
+  catSel.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+  const tcSel = document.getElementById('txn-tc');
+  tcSel.innerHTML = '<option value="">— Sin tarjeta —</option>' +
+    state.creditCards.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  document.getElementById('txn-date').value = txn.date instanceof Date ? txn.date.toISOString().split('T')[0] : txn.date;
+  document.getElementById('txn-desc').value = txn.description || '';
+  document.getElementById('txn-amount').value = txn.amount || '';
+  document.getElementById('txn-currency').value = txn.currency || 'ARS';
+  document.getElementById('txn-status').value = txn.status || 'PAGADO';
+  document.getElementById('txn-bank').value = txn.bank || '';
+  document.getElementById('txn-tc').value = txn.tcId || '';
+  document.getElementById('txn-empresa').value = txn.empresa || '';
+  document.getElementById('txn-cuota-num').value = txn.cuotaNum || '';
+  document.getElementById('txn-cuota-total').value = txn.cuotaTotal || '';
+  catSel.value = txn.category || state.categories[0];
+  const sharedCb = document.getElementById('txn-shared');
+  sharedCb.checked = false;
+  toggleSharedExpense();
+  openModal('modal-txn');
+  setTimeout(() => document.getElementById('txn-desc').focus(), 100);
 }
 
 function approvePending(idx) {
