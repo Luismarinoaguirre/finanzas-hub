@@ -2365,8 +2365,15 @@ tr:hover td { background: var(--table-hover); }
   </div>
 
   <div class="glass-card fade-up d3" style="padding:24px;">
-    <div class="chart-card-title" style="margin-bottom:16px;">Categorías</div>
-    <div id="cfg-cats" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;" id="cfg-cats"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div class="chart-card-title" style="margin:0;">Categorías</div>
+      <div id="cat-sort-toggle" style="display:inline-flex;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:var(--bg-mid);">
+        <button onclick="setCatSort('alpha')" id="cat-sort-alpha" style="padding:5px 14px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:all .2s;">A→Z</button>
+        <button onclick="setCatSort('custom')" id="cat-sort-custom" style="padding:5px 14px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:all .2s;">Custom</button>
+      </div>
+    </div>
+    <div id="cfg-cats" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
+    <div id="cat-reorder-hint" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:12px;">Usá las flechas ↑↓ para reordenar</div>
     <div style="display:flex;gap:10px;">
       <input type="text" class="input-field" id="new-cat-input" placeholder="Nueva categoría..." style="max-width:240px;" onkeydown="if(event.key==='Enter')addCat()">
       <button class="btn btn-glass" onclick="addCat()">＋ Agregar</button>
@@ -3169,7 +3176,7 @@ function openNewTxn(id) {
   
   // Populate categories
   const catSel = document.getElementById('txn-cat');
-  catSel.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+  catSel.innerHTML = getSortedCategories().map(c => `<option value="${c}">${c}</option>`).join('');
   
   // Populate TC selector
   const tcSel = document.getElementById('txn-tc');
@@ -3433,7 +3440,7 @@ function setImportFilter(f) {
 
 function renderImportList() {
   const search = (document.getElementById('import-search')?.value||'').toLowerCase();
-  const cats = state.categories || [];
+  const cats = getSortedCategories();
 
   let items = _importFilter === 'duplicados' ? _importDupes : _importPending;
   if (_importFilter === 'sin-cat') items = _importPending.filter(t => !t.category);
@@ -3509,7 +3516,7 @@ function editImportTxn(idx) {
   editingTxnId = null;
   window._editingPendingIdx = null;
   const catSel = document.getElementById('txn-cat');
-  catSel.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+  catSel.innerHTML = getSortedCategories().map(c => `<option value="${c}">${c}</option>`).join('');
   const tcSel = document.getElementById('txn-tc');
   tcSel.innerHTML = '<option value="">— Sin tarjeta —</option>' +
     state.creditCards.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -3672,7 +3679,7 @@ function renderPending() {
     const curBadge = t.currency === 'USD'
       ? '<span style="background:#34D399;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:6px;">USD</span>'
       : '<span style="background:var(--glass-border);color:var(--text-secondary);font-size:10px;font-weight:600;padding:1px 6px;border-radius:6px;margin-left:6px;">ARS</span>';
-    const catOptions = state.categories.map(c =>
+    const catOptions = getSortedCategories().map(c =>
       `<option value="${c}" ${c === t.category ? 'selected' : ''}>${c}</option>`
     ).join('');
     return `<div class="pending-card">
@@ -3698,7 +3705,7 @@ function editPending(idx) {
   // Open the transaction modal pre-filled with pending data
   editingTxnId = null;
   const catSel = document.getElementById('txn-cat');
-  catSel.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+  catSel.innerHTML = getSortedCategories().map(c => `<option value="${c}">${c}</option>`).join('');
   const tcSel = document.getElementById('txn-tc');
   tcSel.innerHTML = '<option value="">— Sin tarjeta —</option>' +
     state.creditCards.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -4080,13 +4087,22 @@ function processPDF(file) {
 
       // Auto-detect format
       let txns = [];
-      if (fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia')) {
+      const isBrubank = fullText.includes('brubank') || fullText.includes('Brubank');
+      const isGalicia = fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia');
+      const isBrubankVisa = isBrubank && (fullText.includes('Ciclo de facturación') || fullText.includes('Tarjeta') || fullText.includes('Vencimiento actual'));
+
+      if (isGalicia) {
         txns = parseGaliciaPDF(lines);
-      } else if (fullText.includes('brubank') || fullText.includes('Brubank') || fullText.includes('Caja De Ahorro')) {
+      } else if (isBrubankVisa) {
+        txns = parseBrubankVisaPDF(lines);
+        if (!txns.length) txns = parseBrubankPDF(lines); // fallback
+      } else if (isBrubank || fullText.includes('Caja De Ahorro')) {
         txns = parseBrubankPDF(lines);
+        if (!txns.length) txns = parseBrubankVisaPDF(lines); // fallback
       } else {
-        // Try both
-        txns = parseBrubankPDF(lines);
+        // Try all parsers
+        txns = parseBrubankVisaPDF(lines);
+        if (!txns.length) txns = parseBrubankPDF(lines);
         if (!txns.length) txns = parseGaliciaPDF(lines);
       }
 
@@ -4129,7 +4145,9 @@ function parseGaliciaPDF(lines) {
   //   "02.02.26 SU PAGO EN USD 485,78-"
   //   "04.11.25 265325* MERPAGO*VL2 Cuota 04/06 38.787,66"
   //   "26.02.26 IMPUESTO DE SELLOS $ 1.546,89"
-  const txnRe = /^(\d{2}\.\d{2}\.\d{2,4})\s+(?:\d+\*\s+|=)?(.+?)\s+([\d.,]+-?|\d+,\d{2})\s*(?:([\d.,]+-?))?$/;
+  // Require amounts to have comma + 2 decimals (Argentine format: 137.476,81)
+  // This prevents matching reference numbers like 001743001743 as amounts
+  const txnRe = /^(\d{2}\.\d{2}\.\d{2,4})\s+(?:\d+\*\s+|=)?(.+?)\s+([\d.]+,\d{2}-?)\s*(?:([\d.]+,\d{2}-?))?$/;
 
   for (const line of lines) {
     if (/FECHA\s+COMPROBANTE\s+DETALLE/i.test(line)) { inTxns = true; continue; }
@@ -4210,6 +4228,76 @@ function parseBrubankPDF(lines) {
       bank: 'Brubank', tcId: '', empresa: '', cuotaNum: null, cuotaTotal: null,
       month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
       week: '', source: 'cuenta'
+    });
+  }
+  return txns;
+}
+
+// ── Brubank Visa/MC credit card PDF ───────────
+function parseBrubankVisaPDF(lines) {
+  const txns = [];
+  const pAR = s => {
+    if (!s) return 0;
+    return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0;
+  };
+
+  for (const line of lines) {
+    // Match: YYYY-MM-DD  REFNUM(6-12 digits)  Description ... $amount / U$S amount
+    const m = line.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{6,12})\s+(.+)/);
+    if (!m) continue;
+
+    const [, dateStr, ref, rest] = m;
+    const dp = dateStr.split('-');
+    const pd = new Date(parseInt(dp[0]), parseInt(dp[1])-1, parseInt(dp[2]));
+    if (isNaN(pd.getTime())) continue;
+
+    // Extract monetary amounts from end of line
+    // Patterns: "$ 19.104,00"  "U$S 59,00"  "- $ 5.252,08"
+    const amts = [];
+    const re = /(-\s*)?(?:(U\$S)\s*([\d.,]+)|\$\s*([\d.,]+))/g;
+    let match, firstAmtIdx = rest.length;
+    while ((match = re.exec(rest)) !== null) {
+      const neg = !!match[1];
+      const isUSD = !!match[2];
+      const numStr = match[3] || match[4];
+      const val = pAR(numStr);
+      if (val > 0) {
+        amts.push({ neg, isUSD, val });
+        if (match.index < firstAmtIdx) firstAmtIdx = match.index;
+      }
+    }
+    if (!amts.length) continue;
+
+    // Description is everything before the first $ sign
+    let desc = rest.substring(0, firstAmtIdx).replace(/[\s\-]+$/, '').trim();
+    if (!desc || desc.length < 2) continue;
+
+    // Determine currency and amount
+    let amount = 0, currency = 'ARS', isCredit = false;
+    const usdAmt = amts.find(a => a.isUSD);
+    const arsAmt = amts.find(a => !a.isUSD);
+
+    if (usdAmt && usdAmt.val > 0) {
+      amount = usdAmt.val; currency = 'USD'; isCredit = usdAmt.neg;
+    } else if (arsAmt) {
+      amount = arsAmt.val; currency = 'ARS'; isCredit = arsAmt.neg;
+    }
+    if (!amount) continue;
+
+    // Detect cuotas
+    const cm = desc.match(/[Cc]uota[s]?\s*(\d{1,2})\s*[\/\-]\s*(\d{1,2})/);
+
+    txns.push({
+      id: uid(), date: pd, description: desc,
+      amount: Math.round(amount*100)/100,
+      currency, category: auto_cat(desc),
+      status: isCredit ? 'COBRADO' : 'PAGADO',
+      bank: 'Brubank', tcId: 'qclwn62lh',
+      empresa: '',
+      cuotaNum: cm ? parseInt(cm[1]) : null,
+      cuotaTotal: cm ? parseInt(cm[2]) : null,
+      month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
+      week: '', source: 'tc'
     });
   }
   return txns;
@@ -5686,7 +5774,7 @@ function initReportFilters() {
   // Populate category filter
   const catSel = document.getElementById('report-category');
   const currentCat = catSel.value;
-  catSel.innerHTML = '<option value="">Todas</option>' + (state.categories || []).map(c => '<option value="' + c + '"' + (c === currentCat ? ' selected' : '') + '>' + c + '</option>').join('');
+  catSel.innerHTML = '<option value="">Todas</option>' + getSortedCategories().map(c => '<option value="' + c + '"' + (c === currentCat ? ' selected' : '') + '>' + c + '</option>').join('');
 
   // Populate bank filter
   const bankSel = document.getElementById('report-bank');
@@ -5871,12 +5959,34 @@ function renderSettings() {
     </div>`).join('') : '<div style="font-size:13px;color:var(--text-tertiary);">Sin tarjetas configuradas</div>';
 
   // Categories
+  const catSort = state.catSort || 'alpha';
   const catsEl = document.getElementById('cfg-cats');
-  if (catsEl) catsEl.innerHTML = state.categories.map((c,i) => `
-    <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;background:${catColor(c)}18;border:1px solid ${catColor(c)}33;font-size:12px;font-weight:600;color:${catColor(c)};">
-      ${esc(c)}
-      <button onclick="removeCat(${i})" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.6;font-size:13px;padding:0;line-height:1;">×</button>
-    </span>`).join('');
+  const alphaBtn = document.getElementById('cat-sort-alpha');
+  const customBtn = document.getElementById('cat-sort-custom');
+  const reorderHint = document.getElementById('cat-reorder-hint');
+  if (alphaBtn && customBtn) {
+    const activeStyle = 'background:var(--blue);color:#fff;';
+    const inactiveStyle = 'background:transparent;color:var(--text-secondary);';
+    alphaBtn.style.cssText = 'padding:5px 14px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:all .2s;' + (catSort==='alpha' ? activeStyle : inactiveStyle);
+    customBtn.style.cssText = 'padding:5px 14px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:all .2s;' + (catSort==='custom' ? activeStyle : inactiveStyle);
+  }
+  if (reorderHint) reorderHint.style.display = catSort === 'custom' ? 'block' : 'none';
+
+  // Build display order
+  const displayCats = catSort === 'alpha'
+    ? [...state.categories].sort((a,b) => a.localeCompare(b, 'es'))
+    : state.categories;
+
+  if (catsEl) catsEl.innerHTML = displayCats.map((c) => {
+    const realIdx = state.categories.indexOf(c);
+    const arrows = catSort === 'custom'
+      ? `<button onclick="moveCat(${realIdx},-1)" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.5;font-size:10px;padding:0;line-height:1;" title="Subir">▲</button>
+         <button onclick="moveCat(${realIdx},1)" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.5;font-size:10px;padding:0;line-height:1;" title="Bajar">▼</button>` : '';
+    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;background:${catColor(c)}18;border:1px solid ${catColor(c)}33;font-size:12px;font-weight:600;color:${catColor(c)};">
+      ${arrows}${esc(c)}
+      <button onclick="removeCat(${realIdx})" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.6;font-size:13px;padding:0;line-height:1;">×</button>
+    </span>`;
+  }).join('');
   renderBudgetSettings();
 }
 
@@ -5895,6 +6005,28 @@ function removeCat(i) {
   state.categories.splice(i,1);
   saveState();
   renderSettings();
+}
+
+function setCatSort(mode) {
+  state.catSort = mode;
+  saveState();
+  renderSettings();
+}
+
+function moveCat(idx, dir) {
+  const cats = state.categories;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= cats.length) return;
+  [cats[idx], cats[newIdx]] = [cats[newIdx], cats[idx]];
+  saveState();
+  renderSettings();
+}
+
+function getSortedCategories() {
+  const sort = state.catSort || 'alpha';
+  return sort === 'alpha'
+    ? [...state.categories].sort((a,b) => a.localeCompare(b, 'es'))
+    : [...state.categories];
 }
 
 // ═══════════════════════════════════════════════
@@ -6200,7 +6332,7 @@ function updateMobileNav(page) {
 
 function openRecurringModal(id) {
   const catSel = document.getElementById('rec-category');
-  catSel.innerHTML = (state.categories || []).map(c => `<option value="${c}">${c}</option>`).join('');
+  catSel.innerHTML = getSortedCategories().map(c => `<option value="${c}">${c}</option>`).join('');
   const cardSel = document.getElementById('rec-card');
   cardSel.innerHTML = '<option value="">Sin tarjeta (débito/efectivo)</option>' + (state.creditCards || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
@@ -6370,7 +6502,7 @@ function renderBudgetSettings() {
   const container = document.getElementById('budget-settings-list');
   if (!container) return;
   const budgets = state.budgets || {};
-  container.innerHTML = (state.categories || []).map(cat =>
+  container.innerHTML = getSortedCategories().map(cat =>
     `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
       <div style="width:10px;height:10px;border-radius:50%;background:${catColor(cat)};flex-shrink:0;"></div>
       <div style="width:130px;font-size:13px;">${esc(cat)}</div>
