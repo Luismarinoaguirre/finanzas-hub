@@ -4205,11 +4205,12 @@ function parseBrubankPDF(lines) {
     if (!s || s === '-') return 0;
     return Math.abs(parseFloat(s.replace(/[U$S\s$]/g,'').replace(/\./g,'').replace(',','.')) || 0);
   };
-  const amtP = '(\\$[\\d.,]+|U\\$S[\\s\\d.,]+|-)';
+  // Allow space between $ and digits: "$ 566.295,36" (Brubank PDF format)
+  const amtP = '(\\$\\s*[\\d.,]+|U\\$S\\s*[\\d.,]+|-)';
   const rowRe = new RegExp('^(\\d{2}-\\d{2}-\\d{2,4})\\s+(\\d{6,12})\\s+(.+?)\\s+' + amtP + '\\s+' + amtP + '(?:\\s+' + amtP + ')?$');
   for (const line of lines) {
     if (line.includes('Pesos (ARS)')) currency = 'ARS';
-    if (line.includes('lar (USD)') || line.includes('Dolar (USD)')) currency = 'USD';
+    if (line.includes('lar (USD)') || line.includes('Dolar (USD)') || line.includes('Dólar (USD)') || line.includes('lar(USD)')) currency = 'USD';
     const m = line.match(rowRe);
     if (!m) continue;
     const [, dateStr,, desc, c4, c5] = m;
