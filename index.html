@@ -1613,7 +1613,7 @@ tr:hover td { background: var(--table-hover); }
   <div class="page-header fade-up">
     <div>
       <div class="page-title">Mis Tarjetas</div>
-      <div class="page-subtitle" id="cuentas-subtitle">Débito · Crédito</div>
+      <div class="page-subtitle" id="cuentas-subtitle">Crédito · Débito</div>
     </div>
     <div class="header-actions">
       <select class="filter-select" id="cuentas-month-select" onchange="renderCuentas();renderTarjetas()">
@@ -1622,11 +1622,36 @@ tr:hover td { background: var(--table-hover); }
     </div>
   </div>
 
+  <!-- ── Sección: Tarjetas de Crédito ── -->
+  <div style="margin-top:12px;display:flex;align-items:center;gap:12px;" class="fade-up d1">
+    <h2 style="font-size:17px;font-weight:700;color:var(--text-primary);margin:0;">💳 Tarjetas de Crédito</h2>
+    <span id="tc-section-badge" style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--text-secondary);font-weight:500;">0</span>
+    <div style="flex:1;height:1px;background:var(--glass-border);"></div>
+    <button class="btn btn-primary" onclick="openNewTcModal()" style="font-size:13px;padding:6px 14px;">＋ Nueva tarjeta</button>
+  </div>
+
+  <!-- Credit Cards grid -->
+  <div class="fade-up d1" id="tc-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:14px;">
+    <div class="empty-state" style="grid-column:1/-1;">
+      <div class="empty-icon">💳</div>
+      <div class="empty-title">Sin tarjetas configuradas</div>
+      <div class="empty-sub">Agregá tus tarjetas y los movimientos se van a asignar automáticamente.</div>
+    </div>
+  </div>
+
+  <!-- ── Sección: Tarjetas de Débito ── -->
+  <div style="margin-top:32px;display:flex;align-items:center;gap:12px;" class="fade-up d2">
+    <h2 style="font-size:17px;font-weight:700;color:var(--text-primary);margin:0;">🏦 Tarjetas de Débito</h2>
+    <span id="debit-section-badge" style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--text-secondary);font-weight:500;">0</span>
+    <div style="flex:1;height:1px;background:var(--glass-border);"></div>
+    <button class="btn btn-primary" onclick="openEditAccount(null)" style="font-size:13px;padding:6px 14px;">＋ Cuenta</button>
+  </div>
+
   <!-- Saldo total -->
-  <div class="glass-card fade-up d1" style="margin-bottom:0;padding:20px 24px;">
+  <div class="glass-card fade-up d2" style="margin-top:14px;margin-bottom:0;padding:20px 24px;">
     <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
       <div style="flex:1;min-width:200px;">
-        <div style="font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--text-tertiary);text-transform:uppercase;margin-bottom:6px;">Saldo total</div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--text-tertiary);text-transform:uppercase;margin-bottom:6px;">Saldo total en cuentas</div>
         <div style="font-size:30px;font-weight:700;color:var(--text-primary);letter-spacing:-0.5px;" id="cuentas-total-balance">--</div>
         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;" id="cuentas-total-sub">--</div>
       </div>
@@ -1634,36 +1659,8 @@ tr:hover td { background: var(--table-hover); }
     </div>
   </div>
 
-  <!-- ── Sección: Tarjetas de Débito ── -->
-  <div style="margin-top:28px;display:flex;align-items:center;gap:12px;" class="fade-up d2">
-    <h2 style="font-size:17px;font-weight:700;color:var(--text-primary);margin:0;">💳 Tarjetas de Débito</h2>
-    <span id="debit-section-badge" style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--text-secondary);font-weight:500;">0</span>
-    <div style="flex:1;height:1px;background:var(--glass-border);"></div>
-    <button class="btn btn-primary" onclick="openEditAccount(null)" style="font-size:13px;padding:6px 14px;">＋ Cuenta</button>
-  </div>
-
   <!-- Account cards -->
   <div class="fade-up d2" id="accounts-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:14px;"></div>
-
-  <!-- ── Sección: Tarjetas de Crédito ── -->
-  <div style="margin-top:32px;display:flex;align-items:center;gap:12px;" class="fade-up d3">
-    <h2 style="font-size:17px;font-weight:700;color:var(--text-primary);margin:0;">💳 Tarjetas de Crédito</h2>
-    <span id="tc-section-badge" style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--text-secondary);font-weight:500;">0</span>
-    <div style="flex:1;height:1px;background:var(--glass-border);"></div>
-    <button class="btn btn-primary" onclick="openNewTcModal()" style="font-size:13px;padding:6px 14px;">＋ Nueva tarjeta</button>
-    <select id="tc-month-select" class="txn-select" onchange="renderTarjetas()" style="font-size:13px;padding:6px 10px;">
-      <option value="">Mes actual</option>
-    </select>
-  </div>
-
-  <!-- Credit Cards grid -->
-  <div class="fade-up d3" id="tc-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:14px;">
-    <div class="empty-state" style="grid-column:1/-1;">
-      <div class="empty-icon">💳</div>
-      <div class="empty-title">Sin tarjetas configuradas</div>
-      <div class="empty-sub">Agregá tus tarjetas y los movimientos se van a asignar automáticamente.</div>
-    </div>
-  </div>
 </div>
 
 <!-- Edit Account Modal -->
@@ -4928,7 +4925,8 @@ function deleteTc(id) {
 }
 
 function getTcMonth() {
-  const sel = document.getElementById('tc-month-select');
+  // Use the same month selector as cuentas
+  const sel = document.getElementById('cuentas-month-select');
   return sel?.value || getMonthKey(new Date());
 }
 
@@ -4939,16 +4937,6 @@ function renderTarjetas() {
   const mk = getTcMonth();
   const [pY,pM] = mk.split('-').map(Number);
   const monthTxns = state.transactions.filter(t => getMonthKey(t.date)===mk && t.tcId);
-
-  // Populate month selector
-  const tcSel = document.getElementById('tc-month-select');
-  if (tcSel) {
-    const months = allMonths();
-    tcSel.innerHTML = months.map(m => {
-      const [y,mo] = m.split('-').map(Number);
-      return `<option value="${m}" ${m===mk?'selected':''}>${MNAMES[mo-1]} ${y}</option>`;
-    }).join('');
-  }
 
   const grid = document.getElementById('tc-cards-grid');
   if (!state.creditCards.length) {
