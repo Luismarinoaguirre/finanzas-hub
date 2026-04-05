@@ -1534,6 +1534,34 @@ tr:hover td { background: var(--table-hover); }
       <div class="top5-grid" id="top5-grid" style="padding:16px 18px;gap:10px;display:grid;"></div>
     </div>
 
+    <!-- Cuotas activas -->
+    <div class="glass-card fade-up d4" id="dash-cuotas-section" style="padding:0;margin-top:20px;">
+      <div class="table-header">
+        <div class="table-title">📋 Cuotas activas</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select class="filter-select filter-select-sm" id="dash-cuota-tc-filter" onchange="renderDashCuotas()">
+            <option value="">Todas las tarjetas</option>
+          </select>
+          <button class="btn btn-glass btn-sm" onclick="openNewCuota()">＋ Nueva</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:0 18px 14px;">
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;">Activas</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text-primary);" id="dash-cuota-count">0</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;">Gasto mensual</div>
+          <div style="font-size:18px;font-weight:700;color:var(--red);" id="dash-cuota-monthly">$0</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;">Deuda total</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text-primary);" id="dash-cuota-debt">$0</div>
+        </div>
+      </div>
+      <div id="dash-cuotas-list" style="padding:0 18px 18px;"></div>
+    </div>
+
   </div>
 </div>
 
@@ -4233,20 +4261,51 @@ function normalizeCat(s) {
 }
 
 function auto_cat(desc) {
+  // 1. Try learned categories from user history first
+  const learned = learnedCat(desc);
+  if (learned) return learned;
+  // 2. Fallback to regex rules
   const d = (desc||'').toUpperCase();
   if (/UBER|DIDI|DLO\*DIDI|CABIFY|TAXI|PEAJE|SUBTE|SUBE\b|FLYBONDI|AEROLIN|WIZZ AIR/.test(d)) return 'Transporte';
-  if (/PEDIDOSYA|RAPPI|MCDONALDS|BURGER|PIZZA|SUSHI|\bBAR\b|CAFETER|STARBUCKS|KFC|SUBWAY|POLLO ISIDRO|ELPOLLOISIDRO|USINA CAFETERA|MERPAGO\*SABORES|MERPAGO\*365|\b365\b|MERPAGO\*QR|TROPICO|PASEO POR EL HUERTO|WIDIT DRINKS|MERPAGO\*LAJUVENILPAST|\bBEA\b|MARKET SAN ISIDRO|SUPERSOL|MERPAGO\*MAX|NEW FREDYS|FREDYS/.test(d)) return 'Gastronoma';
+  if (/PEDIDOSYA|RAPPI|MCDONALDS|BURGER|PIZZA|SUSHI|\bBAR\b|CAFETER|STARBUCKS|KFC|SUBWAY|POLLO ISIDRO|ELPOLLOISIDRO|USINA CAFETERA|MERPAGO\*SABORES|MERPAGO\*365|\b365\b|MERPAGO\*QR|TROPICO|PASEO POR EL HUERTO|WIDIT DRINKS|MERPAGO\*LAJUVENILPAST|\bBEA\b|MARKET SAN ISIDRO|SUPERSOL|MERPAGO\*MAX|NEW FREDYS|FREDYS/.test(d)) return 'Gastronomía';
   if (/SUPERMERCADO|CARREFOUR|\bCOTO\b|DISCO\b|JUMBO|WALMART|VEA\b|MERPAGO\*COTO/.test(d)) return 'Compras';
   if (/NETFLIX|SPOTIFY|AMAZON|HBO|DISNEY|YOUTUBE|OPENAI|CHATGPT|ADOBE|FRAMER|ICLOUD|CLUBTICKETS/.test(d)) return 'Suscripciones';
   if (/FARMACIA|MEDICO|CLINICA|HOSPITAL|LABORATORIO|OPTICA|SWISS MEDICAL|PAX ASSISTANCE/.test(d)) return 'Salud';
   if (/\bZARA\b|H&M|ADIDAS|NIKE|INDUMENTARIA/.test(d)) return 'Ropa';
-  if (/IMPUESTO|IVA\b|IIBB|DB\.RG|DB IVA|SELLOS|PERCEP|INGRESOS BRUTOS/.test(d)) return 'Comision';
-  if (/INTERESES|FINANCIACION|PUNIT|CARGO POR GESTION|PAGO DEL PLAN|SU PAGO EN PESOS/.test(d)) return 'Prestamo';
+  if (/IMPUESTO|IVA\b|IIBB|DB\.RG|DB IVA|SELLOS|PERCEP|INGRESOS BRUTOS/.test(d)) return 'Comisión';
+  if (/INTERESES|FINANCIACION|PUNIT|CARGO POR GESTION|PAGO DEL PLAN|SU PAGO EN PESOS/.test(d)) return 'Préstamo';
   if (/AIRBNB|BOOKING|DESPEGAR|\bHOTEL\b|VUELO/.test(d)) return 'Viajes';
   if (/GYM|SPORTCLUB|MEGATLON|PILATES|YOGA/.test(d)) return 'Deporte';
   if (/GALICIA VISA|VISA BRUBANK|GALICIA AMEX|MERCADOPAGO\b|MERPAGO\*MERCADOPAGO|PAGO DE TARJETA|CLARO PAY|A UNA CUENTA TUYA/.test(d)) return 'Transferencia';
   if (/HASLIBERG|HAPPY PEOPLE|PROVEEDOR|MANSO|MODULAR|GLOBAL FLOW/.test(d)) return 'Laburo';
   return '';
+}
+
+// Learn categories from user's past categorizations
+function learnedCat(desc) {
+  if (!desc || !state.transactions.length) return '';
+  const needle = (desc||'').toUpperCase().replace(/\s+/g,' ').trim();
+  if (needle.length < 3) return '';
+  // Extract key words from description (remove numbers, dates, refs)
+  const keywords = needle.replace(/\d{4,}/g,'').replace(/\bCUOTA\s*\d+\/\d+/gi,'').trim();
+  if (!keywords || keywords.length < 3) return '';
+  // Find past transactions with same or very similar description that have a valid category
+  const isJunk = c => !c || /^\$[\d.,]+$/.test(c) || /^\d+$/.test(c) || c === '0' || c === 'Otros';
+  const matches = {};
+  state.transactions.forEach(t => {
+    if (isJunk(t.category)) return;
+    const tDesc = (t.description||'').toUpperCase().replace(/\s+/g,' ').trim();
+    // Exact match
+    if (tDesc === needle) { matches[t.category] = (matches[t.category]||0) + 3; return; }
+    // Key part match (first significant word)
+    const tKeywords = tDesc.replace(/\d{4,}/g,'').replace(/\bCUOTA\s*\d+\/\d+/gi,'').trim();
+    if (tKeywords.length >= 3 && keywords.includes(tKeywords)) { matches[t.category] = (matches[t.category]||0) + 2; return; }
+    if (tKeywords.length >= 3 && tKeywords.includes(keywords)) { matches[t.category] = (matches[t.category]||0) + 2; return; }
+  });
+  if (!Object.keys(matches).length) return '';
+  // Return the most common category
+  const best = Object.entries(matches).sort((a,b)=>b[1]-a[1])[0];
+  return best[0];
 }
 
 function mergeTransactions(txns) {
@@ -4652,6 +4711,7 @@ function renderDashboard() {
   renderBudgetBars(monthTxns);
   checkBudgetAlerts(monthTxns);
   renderTop5(monthTxns);
+  renderDashCuotas();
   updateSidebarBalance();
 }
 
@@ -4703,26 +4763,54 @@ function renderWeeklyChart(txns) {
   }
 
   const cc = getChartColors();
+  // Gradient fill
+  const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.clientHeight || 220);
+  gradient.addColorStop(0, 'rgba(59,130,246,0.12)');
+  gradient.addColorStop(1, 'rgba(59,130,246,0.0)');
+
   chartWeekly = new Chart(ctx, {
-    type: 'bar',
+    type: 'line',
     data: {
       labels,
       datasets: [{
         data,
-        backgroundColor: 'rgba(59,130,246,0.3)',
-        borderColor: 'rgba(59,130,246,0.8)',
-        borderWidth: 1,
-        borderRadius: 6,
-        borderSkipped: false,
+        borderColor: 'rgba(59,130,246,0.85)',
+        backgroundColor: gradient,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHitRadius: 20,
+        pointHoverRadius: 3,
+        pointHoverBackgroundColor: 'rgba(59,130,246,1)',
+        pointHoverBorderColor: 'rgba(59,130,246,1)',
+        pointHoverBorderWidth: 0,
+        tension: 0.4,
+        fill: true,
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$'+fmtN(ctx.raw) }, backgroundColor:cc.tooltipBg, borderColor:cc.tooltipBorder, borderWidth:1, titleColor:cc.tick, bodyColor:cc.tick, padding:10, cornerRadius:8 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: c => '$'+fmtN(c.raw) },
+          backgroundColor: '#1e293b',
+          borderColor: 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          titleColor: '#f1f5f9',
+          bodyColor: '#f1f5f9',
+          padding: 12,
+          cornerRadius: 10,
+          titleFont: { size: 11, weight: '600' },
+          bodyFont: { size: 13, weight: '700' },
+          displayColors: false,
+          caretSize: 6,
+        }
+      },
       scales: {
-        x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 11 } } },
-        y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 11 }, callback: v => '$'+fmtN(v) } }
+        x: { grid: { display: false }, ticks: { color: cc.tick, font: { size: 11 } }, border: { display: false } },
+        y: { grid: { display: false }, ticks: { color: cc.tick, font: { size: 11 }, callback: v => '$'+fmtN(v), padding: 8 }, border: { display: false } }
       }
     }
   });
@@ -4789,7 +4877,8 @@ function populateFilters() {
     months.map(m => { const [y,mo]=m.split('-').map(Number); return `<option value="${m}">${MNAMES[mo-1]} ${y}</option>`; }).join('');
 
   const fCat = document.getElementById('filter-cat');
-  const cats = [...new Set(state.transactions.map(t=>t.category||'Otros'))].sort();
+  const isJunkCat = c => !c || /^\$[\d.,]+$/.test(c) || /^\d+$/.test(c) || c === '0';
+  const cats = [...new Set(state.transactions.map(t=>t.category||'Otros'))].filter(c => !isJunkCat(c)).sort((a,b) => a.localeCompare(b,'es'));
   fCat.innerHTML = '<option value="">Todas las categorías</option>' +
     cats.map(c => `<option value="${c}">${c}</option>`).join('');
 
@@ -5032,6 +5121,79 @@ function deleteCuota(id) {
 function advanceCuota(id) {
   const c = state.cuotas.find(x=>x.id===id);
   if (c && c.paid < c.total) { c.paid++; saveState(); renderCuotas(); }
+}
+
+function renderDashCuotas() {
+  const section = document.getElementById('dash-cuotas-section');
+  if (!section) return;
+
+  // Populate TC filter
+  const filterSel = document.getElementById('dash-cuota-tc-filter');
+  if (filterSel && filterSel.options.length <= 1) {
+    state.creditCards.forEach(tc => {
+      const opt = document.createElement('option');
+      opt.value = tc.id; opt.textContent = tc.name;
+      filterSel.appendChild(opt);
+    });
+  }
+
+  const filterTC = filterSel ? filterSel.value : '';
+  const all = state.cuotas || [];
+  const filtered = filterTC ? all.filter(c => c.tcId === filterTC) : all;
+  const active = filtered.filter(c => c.paid < c.total);
+  const done = filtered.filter(c => c.paid >= c.total);
+  const monthly = active.reduce((s,c) => s + (c.currency === 'ARS' ? c.amount : c.amount * (state.usdRate||1)), 0);
+  const totalDebt = active.reduce((s,c) => s + (c.amount * (c.total - c.paid)) * (c.currency === 'ARS' ? 1 : (state.usdRate||1)), 0);
+
+  const el = id => document.getElementById(id);
+  if (el('dash-cuota-count')) el('dash-cuota-count').textContent = active.length;
+  if (el('dash-cuota-monthly')) el('dash-cuota-monthly').textContent = '$' + fmtN(monthly);
+  if (el('dash-cuota-debt')) el('dash-cuota-debt').textContent = '$' + fmtN(totalDebt);
+
+  const list = document.getElementById('dash-cuotas-list');
+  if (!list) return;
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-caption);font-size:13px;">Sin cuotas registradas</div>';
+    return;
+  }
+
+  const renderRow = c => {
+    const tc = c.tcId ? state.creditCards.find(x => x.id === c.tcId) : null;
+    const remaining = c.total - c.paid;
+    const pct = Math.round(c.paid / c.total * 100);
+    const isDone = c.paid >= c.total;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.description)}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+          <div style="flex:1;height:5px;border-radius:3px;background:var(--border);overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${isDone?'var(--green)':tc?.color||'var(--blue)'};border-radius:3px;transition:width .3s;"></div>
+          </div>
+          <span style="font-size:11px;color:var(--text-caption);white-space:nowrap;">${c.paid}/${c.total}</span>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${fmtM(c.amount, c.currency)}</div>
+        <div style="font-size:11px;color:${isDone?'var(--green)':'var(--text-caption)'}">${isDone?'✓ Pagada':remaining+' mes'+(remaining!==1?'es':'')}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        ${!isDone?`<button class="btn btn-glass btn-sm" onclick="advanceCuota('${c.id}');renderDashCuotas();" title="Avanzar cuota" style="padding:2px 8px;font-size:11px;">+1</button>`:''}
+        <button class="btn btn-danger btn-icon btn-sm" onclick="deleteCuota('${c.id}');renderDashCuotas();" title="Eliminar" style="padding:2px 6px;font-size:11px;">✕</button>
+      </div>
+    </div>`;
+  };
+
+  let html = '';
+  if (active.length) {
+    html += `<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-caption);padding:6px 0 2px;">Activas</div>`;
+    html += active.map(renderRow).join('');
+  }
+  if (done.length) {
+    html += `<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-caption);padding:10px 0 2px;">Finalizadas</div>`;
+    html += done.map(renderRow).join('');
+  }
+  list.innerHTML = html;
 }
 
 function renderCuotas() {
