@@ -870,22 +870,6 @@ tr:hover td { background: var(--table-hover); }
 .filter-select option { background: var(--bg-dropdown); }
 
 /* ═══════════════════════════
-   GOALS / SAVINGS
-═══════════════════════════ */
-.goals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-.goal-card { padding: 22px; position: relative; overflow: hidden; }
-.goal-emoji { font-size: 26px; margin-bottom: 12px; }
-.goal-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-.goal-target { font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); margin-bottom: 16px; }
-.goal-amounts { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-.goal-current { font-size: 22px; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.5px; }
-.goal-of { font-size: 12px; color: var(--text-tertiary); font-family: var(--font-mono); }
-.goal-bar { height: 6px; background: var(--track-bg); border-radius: 3px; margin-bottom: 8px; overflow: hidden; }
-.goal-fill { height: 100%; border-radius: 3px; transition: width 0.9s cubic-bezier(0.34,1.56,0.64,1); }
-.goal-pct { font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); }
-
-
-/* ═══════════════════════════
    TOAST
 ═══════════════════════════ */
 .toast {
@@ -2564,47 +2548,6 @@ tr:hover td { background: var(--table-hover); }
   </div>
 </div>
 
-<!-- New Goal -->
-<div class="modal-overlay" id="modal-goal">
-  <div class="modal">
-    <div class="modal-title">Nueva meta</div>
-    <div class="modal-sub">Definí un objetivo de ahorro</div>
-    <div class="modal-grid">
-      <div class="input-group modal-full">
-        <div class="input-label">Nombre de la meta</div>
-        <input type="text" class="input-field" id="goal-name" placeholder="ej: Vacaciones en Brasil">
-      </div>
-      <div class="input-group">
-        <div class="input-label">Emoji</div>
-        <input type="text" class="input-field" id="goal-emoji" placeholder="🏖" maxlength="2">
-      </div>
-      <div class="input-group">
-        <div class="input-label">Moneda</div>
-        <select class="input-field" id="goal-currency">
-          <option value="ARS">ARS</option>
-          <option value="USD">USD</option>
-        </select>
-      </div>
-      <div class="input-group">
-        <div class="input-label">Monto objetivo</div>
-        <input type="number" class="input-field" id="goal-target-amount" placeholder="0">
-      </div>
-      <div class="input-group">
-        <div class="input-label">Ahorro actual</div>
-        <input type="number" class="input-field" id="goal-current-amount" placeholder="0">
-      </div>
-      <div class="input-group">
-        <div class="input-label">Fecha objetivo</div>
-        <input type="date" class="input-field" id="goal-date">
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-glass" onclick="closeModal('modal-goal')">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveGoal()">Crear meta</button>
-    </div>
-  </div>
-</div>
-
 <!-- ═══ RECURRING MODAL ═══ -->
 <div class="modal-overlay" id="modal-recurring">
   <div class="modal">
@@ -2758,7 +2701,6 @@ function setTheme(mode) {
       const id = activePage.id.replace('page-','');
       if (id === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
       else if (id === 'compare' && typeof renderCompare === 'function') renderCompare();
-      else if (id === 'charts' && typeof renderAdvancedCharts === 'function') renderAdvancedCharts();
     }
   } catch(e) {}
 }
@@ -2813,7 +2755,6 @@ let state = {
   transactions: [],
   creditCards: [],
   cuotas: [],
-  goals: [],
   inversiones: [],
   income: { ars: 0, arsVar: 0, usd: 0, usdVar: 0 },
   usdRate: 1380,
@@ -2957,7 +2898,6 @@ const DEFAULT_STATE = {
     { id: "qclwn62lh", name: "Visa Brubank",   type: "VISA", limit: 681000,               color: "#A78BFA", currency: "ARS" },
   ],
   cuotas: [],
-  goals: [],
   accounts: [
     { id: 'acc-brubank',  name: 'Brubank',     icon: '🟦', color: '#3B82F6', balance: 0, currency: 'ARS' },
     { id: 'acc-galicia',  name: 'Galicia',      icon: '🟥', color: '#F87171', balance: 0, currency: 'ARS' },
@@ -3064,7 +3004,7 @@ function nav(page) {
   // Render page
   if (page === 'dashboard') renderDashboard();
   if (page === 'transactions') { populateFilters(); renderTransactions(); }
-  if (page === 'cuentas') { renderCuentas(); renderTarjetas(); renderCuotas(); }
+  if (page === 'cuentas') { renderCuentas(); renderTarjetas(); }
   if (page === 'inversiones') renderInversiones();
   if (page === 'compare') populateCmpSelectors();
   if (page === 'fixed') renderFixed();
@@ -5074,8 +5014,6 @@ function renderTarjetas() {
   }
 }
 
-function renderTcDetail() { /* removed — no longer used */ }
-
 // ═══════════════════════════════════════════════
 //  CUOTAS
 // ═══════════════════════════════════════════════
@@ -5107,7 +5045,7 @@ function saveCuota() {
   });
   saveState();
   closeModal('modal-cuota');
-  renderCuotas();
+  renderDashCuotas();
   showToast('Cuota guardada');
 }
 
@@ -5115,12 +5053,12 @@ function deleteCuota(id) {
   if (!confirm('¿Eliminar esta cuota?')) return;
   state.cuotas = state.cuotas.filter(c=>c.id!==id);
   saveState();
-  renderCuotas();
+  renderDashCuotas();
 }
 
 function advanceCuota(id) {
   const c = state.cuotas.find(x=>x.id===id);
-  if (c && c.paid < c.total) { c.paid++; saveState(); renderCuotas(); }
+  if (c && c.paid < c.total) { c.paid++; saveState(); renderDashCuotas(); }
 }
 
 function renderDashCuotas() {
@@ -5194,61 +5132,6 @@ function renderDashCuotas() {
     html += done.map(renderRow).join('');
   }
   list.innerHTML = html;
-}
-
-function renderCuotas() {
-  const badge = document.getElementById('cuota-section-badge');
-  if (badge) badge.textContent = state.cuotas.filter(c=>c.paid<c.total).length;
-  const active = state.cuotas.filter(c=>c.paid<c.total);
-  const done = state.cuotas.filter(c=>c.paid>=c.total);
-  const monthly = active.reduce((s,c)=>s+(c.currency==='ARS'?c.amount:c.amount*state.usdRate),0);
-  const totalDebt = active.reduce((s,c)=>s+(c.amount*(c.total-c.paid))*(c.currency==='ARS'?1:state.usdRate),0);
-  const biggest = active.sort((a,b)=>b.amount-a.amount)[0];
-
-  const el = (id) => document.getElementById(id);
-  if (el('cuota-active-count')) el('cuota-active-count').textContent = active.length;
-  if (el('cuota-active-sub')) el('cuota-active-sub').textContent = done.length + ' finalizadas';
-  if (el('cuota-monthly')) el('cuota-monthly').textContent = '$'+fmtN(monthly);
-  if (el('cuota-total-debt')) el('cuota-total-debt').textContent = '$'+fmtN(totalDebt);
-  if (el('cuota-biggest')) el('cuota-biggest').textContent = biggest ? '$'+fmtN(biggest.amount) : '—';
-  if (el('cuota-biggest-sub')) el('cuota-biggest-sub').textContent = biggest ? biggest.description : '—';
-
-  const list = document.getElementById('cuotas-list');
-  if (!list) return;
-  if (!state.cuotas.length) {
-    list.innerHTML = '<div class="empty-state" style="padding:48px;"><div class="empty-icon">📋</div><div class="empty-title">Sin cuotas</div></div>';
-    return;
-  }
-
-  const renderGroup = (cuotas, title) => {
-    if (!cuotas.length) return '';
-    return `<div style="padding:10px 22px 4px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-caption);">${title}</div>` +
-      cuotas.map(c => {
-        const tc = c.tcId ? state.creditCards.find(x=>x.id===c.tcId) : null;
-        const remaining = c.total - c.paid;
-        const pct = Math.round(c.paid/c.total*100);
-        const monthsLeft = remaining;
-        return `<div class="cuota-row">
-          <div class="cuota-name">${esc(c.description)}</div>
-          <div class="cuota-progress-wrap">
-            <div class="cuota-progress-label">
-              <span>${c.paid}/${c.total} cuotas</span>
-              <span>${monthsLeft} restante${monthsLeft!==1?'s':''}</span>
-            </div>
-            <div class="cuota-bar"><div class="cuota-fill" style="width:${pct}%;background:${tc?.color||'var(--blue)'}"></div></div>
-          </div>
-          <div class="cuota-amount">${fmtM(c.amount,c.currency)}</div>
-          <div class="cuota-tc">${tc?`<span style="color:${tc.color}">${esc(tc.name)}</span>`:'—'}</div>
-          <div class="cuota-eta" style="${c.paid>=c.total?'color:var(--green)':''}">${c.paid>=c.total?'✓ Pagada':remaining+' mes'+( remaining!==1?'es':'')}</div>
-          <div style="display:flex;gap:6px;margin-left:8px;">
-            ${c.paid<c.total?`<button class="btn btn-glass btn-sm" onclick="advanceCuota('${c.id}')" title="Avanzar cuota">+1</button>`:''}
-            <button class="btn btn-danger btn-icon btn-sm" onclick="deleteCuota('${c.id}')" title="Eliminar">✕</button>
-          </div>
-        </div>`;
-      }).join('');
-  };
-
-  list.innerHTML = renderGroup(active, 'Activas') + renderGroup(done, 'Finalizadas');
 }
 
 // ═══════════════════════════════════════════════
@@ -5601,84 +5484,6 @@ function renderCompareChart(cats, byA, byB, labelA, labelB) {
     }
   });
 }
-
-// ═══════════════════════════════════════════════
-//  GOALS
-// ═══════════════════════════════════════════════
-function openNewGoal() {
-  document.getElementById('goal-name').value='';
-  document.getElementById('goal-emoji').value='🎯';
-  document.getElementById('goal-target-amount').value='';
-  document.getElementById('goal-current-amount').value='0';
-  document.getElementById('goal-currency').value='ARS';
-  document.getElementById('goal-date').value='';
-  openModal('modal-goal');
-}
-
-function saveGoal() {
-  const name = document.getElementById('goal-name').value.trim();
-  const target = parseFloat(document.getElementById('goal-target-amount').value);
-  if (!name||!target) { showToast('Completá los campos requeridos','error'); return; }
-  state.goals.push({
-    id: uid(),
-    name,
-    emoji: document.getElementById('goal-emoji').value||'🎯',
-    currency: document.getElementById('goal-currency').value,
-    target,
-    current: parseFloat(document.getElementById('goal-current-amount').value)||0,
-    deadline: document.getElementById('goal-date').value||null,
-  });
-  saveState();
-  closeModal('modal-goal');
-  renderGoals();
-  showToast('Meta creada');
-}
-
-function deleteGoal(id) {
-  if (!confirm('¿Eliminar esta meta?')) return;
-  state.goals = state.goals.filter(g=>g.id!==id);
-  saveState(); renderGoals();
-}
-
-function updateGoalAmount(id) {
-  const g = state.goals.find(x=>x.id===id);
-  if (!g) return;
-  const val = parseFloat(prompt('Actualizá el monto ahorrado:', g.current));
-  if (!isNaN(val)) { g.current = val; saveState(); renderGoals(); showToast('Meta actualizada'); }
-}
-
-function renderGoals() {
-  const el = document.getElementById('goals-grid');
-  if (!state.goals.length) {
-    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">◎</div><div class="empty-title">Sin metas</div><div class="empty-sub">Creá tu primer objetivo de ahorro.</div></div>';
-    return;
-  }
-  const goalColors = ['var(--blue)','var(--purple)','var(--teal)','var(--green)','var(--orange)','var(--gold)'];
-  el.innerHTML = state.goals.map((g,i) => {
-    const pct = g.target > 0 ? Math.min(100,Math.round(g.current/g.target*100)) : 0;
-    const col = goalColors[i%goalColors.length];
-    const remaining = g.target - g.current;
-    const deadline = g.deadline ? new Date(g.deadline) : null;
-    const daysLeft = deadline ? Math.max(0,Math.ceil((deadline-new Date())/86400000)) : null;
-    return `<div class="glass-card goal-card" style="position:relative;">
-      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${col};"></div>
-      <div class="goal-emoji">${g.emoji}</div>
-      <div class="goal-name">${esc(g.name)}</div>
-      <div class="goal-target">${fmtM(g.target,g.currency)} objetivo${deadline?` · ${daysLeft} días`:''}</div>
-      <div class="goal-amounts">
-        <div class="goal-current" style="color:${col}">${fmtM(g.current,g.currency)}</div>
-        <div class="goal-of">/ ${fmtM(g.target,g.currency)}</div>
-      </div>
-      <div class="goal-bar"><div class="goal-fill" style="width:${pct}%;background:${col}"></div></div>
-      <div class="goal-pct">${pct}% completado · faltan ${fmtM(remaining,g.currency)}</div>
-      <div style="display:flex;gap:8px;margin-top:14px;">
-        <button class="btn btn-glass btn-sm" onclick="updateGoalAmount('${g.id}')">📝 Actualizar</button>
-        <button class="btn btn-danger btn-icon btn-sm" onclick="deleteGoal('${g.id}')">✕</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
 
 // ═══════════════════════════════════════════════
 //  GASTOS FIJOS (Fixed Expenses Analysis)
@@ -6247,10 +6052,6 @@ function renderCuentas() {
     </div>`;
 }
 
-function renderCuentasMovs() { /* removed — no longer used */ }
-
-function renderCuentasInsights() { /* removed — no longer used */ }
-
 function getCatEmoji(cat) {
   const map = {'Gastronomía':'🍽️','Transporte':'🚗','Compras':'🛍️','Cuentas':'📄','Personal':'👤',
     'Transferencia':'↔️','Laburo':'💼','Préstamo':'🏦','Deporte':'⚽','Kiosco':'🏪',
@@ -6545,208 +6346,6 @@ function saveBudgets() {
   });
   saveState();
   showToast('Presupuestos guardados');
-}
-
-// ═══════════════════════════════════════════════
-//  ADVANCED CHARTS
-// ═══════════════════════════════════════════════
-let chartAnnual = null, chartCashflow = null, chartMerchants = null;
-
-function getChartPeriodTxns() {
-  const sel = document.getElementById('chart-period');
-  const val = sel ? sel.value : '6';
-  const now = new Date();
-  let from;
-  if (val === 'ytd') {
-    from = new Date(now.getFullYear(), 0, 1);
-  } else if (val === 'all') {
-    from = new Date(2000, 0, 1);
-  } else {
-    from = new Date(now.getFullYear(), now.getMonth() - parseInt(val), 1);
-  }
-  return state.transactions.filter(t => {
-    const d = t.date instanceof Date ? t.date : new Date(t.date);
-    return d >= from && t.currency === 'ARS';
-  });
-}
-
-function renderAdvancedCharts() {
-  const txns = getChartPeriodTxns();
-  renderAnnualTrend(txns);
-  renderCashflowChart(txns);
-  renderHeatmap(txns);
-  renderMerchantChart(txns);
-}
-
-function renderAnnualTrend(txns) {
-  const monthly = {};
-  txns.filter(t => t.status === 'PAGADO' || t.status === 'A PAGAR').forEach(t => {
-    const mk = getMonthKey(t.date);
-    monthly[mk] = (monthly[mk] || 0) + t.amount;
-  });
-  const labels = Object.keys(monthly).sort();
-  const data = labels.map(k => monthly[k]);
-
-  if (chartAnnual) chartAnnual.destroy();
-  const ctx = document.getElementById('chart-annual');
-  if (!ctx) return;
-  chartAnnual = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels.map(l => { const [y,m] = l.split('-'); return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1] + ' ' + y.slice(2); }),
-      datasets: [{
-        data: data,
-        borderColor: '#3B82F6',
-        backgroundColor: 'rgba(59,130,246,0.1)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 4,
-        pointBackgroundColor: '#3B82F6'
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + fmtN(ctx.raw) } } },
-      scales: {
-        y: { ticks: { color: 'var(--text-secondary)', callback: v => '$' + fmtN(v) }, grid: { color: 'var(--table-border)' } },
-        x: { ticks: { color: 'var(--text-secondary)' }, grid: { display: false } }
-      }
-    }
-  });
-}
-
-function renderCashflowChart(txns) {
-  const months = {};
-  txns.forEach(t => {
-    const mk = getMonthKey(t.date);
-    if (!months[mk]) months[mk] = { income: 0, expense: 0 };
-    if (t.status === 'COBRADO') months[mk].income += t.amount;
-    else if (t.status === 'PAGADO' || t.status === 'A PAGAR') months[mk].expense += t.amount;
-  });
-  const labels = Object.keys(months).sort();
-  const incomeData = labels.map(k => months[k].income);
-  const expenseData = labels.map(k => months[k].expense);
-  const netData = labels.map(k => months[k].income - months[k].expense);
-
-  if (chartCashflow) chartCashflow.destroy();
-  const ctx = document.getElementById('chart-cashflow');
-  if (!ctx) return;
-  chartCashflow = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels.map(l => { const [y,m] = l.split('-'); return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1] + ' ' + y.slice(2); }),
-      datasets: [
-        { label: 'Ingresos', data: incomeData, backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4, order: 2 },
-        { label: 'Gastos', data: expenseData, backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4, order: 2 },
-        { label: 'Neto', data: netData, type: 'line', borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.4, pointRadius: 3, order: 1 }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: 'var(--text-secondary)' } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + fmtN(ctx.raw) } } },
-      scales: {
-        y: { ticks: { color: 'var(--text-secondary)', callback: v => '$' + fmtN(v) }, grid: { color: 'var(--table-border)' } },
-        x: { ticks: { color: 'var(--text-secondary)' }, grid: { display: false } }
-      }
-    }
-  });
-}
-
-function renderHeatmap(txns) {
-  const container = document.getElementById('heatmap-container');
-  if (!container) return;
-  const daily = {};
-  txns.filter(t => t.status === 'PAGADO' || t.status === 'A PAGAR').forEach(t => {
-    const d = t.date instanceof Date ? t.date : new Date(t.date);
-    const key = d.toISOString().split('T')[0];
-    daily[key] = (daily[key] || 0) + t.amount;
-  });
-
-  const values = Object.values(daily);
-  if (!values.length) { container.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:20px;">Sin datos para el período seleccionado</div>'; return; }
-  const maxVal = Math.max(...values);
-  const levels = [0, maxVal * 0.25, maxVal * 0.5, maxVal * 0.75, maxVal];
-
-  const dates = Object.keys(daily).sort();
-  const startDate = new Date(dates[0]);
-  const endDate = new Date(dates[dates.length - 1]);
-  const start = new Date(startDate);
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  const end = new Date(endDate);
-  end.setDate(end.getDate() + (7 - end.getDay()) % 7);
-
-  const weeks = [];
-  let current = new Date(start);
-  let weekCells = [];
-  while (current <= end) {
-    const key = current.toISOString().split('T')[0];
-    const val = daily[key] || 0;
-    let level = 0;
-    if (val > levels[3]) level = 4;
-    else if (val > levels[2]) level = 3;
-    else if (val > levels[1]) level = 2;
-    else if (val > 0) level = 1;
-    weekCells.push({ date: key, val, level });
-    if (weekCells.length === 7) { weeks.push(weekCells); weekCells = []; }
-    current.setDate(current.getDate() + 1);
-  }
-  if (weekCells.length) weeks.push(weekCells);
-
-  const colors = ['var(--bg-surface)', 'rgba(59,130,246,0.25)', 'rgba(59,130,246,0.45)', 'rgba(59,130,246,0.7)', 'rgba(59,130,246,0.95)'];
-  const dayLabels = ['L','M','X','J','V','S','D'];
-
-  let html = '<div style="display:flex;gap:2px;">';
-  html += '<div style="display:flex;flex-direction:column;gap:2px;margin-right:4px;">';
-  dayLabels.forEach((d, i) => {
-    html += `<div style="width:14px;height:14px;font-size:9px;color:var(--text-tertiary);display:flex;align-items:center;justify-content:center;">${i % 2 === 0 ? d : ''}</div>`;
-  });
-  html += '</div>';
-
-  weeks.forEach(week => {
-    html += '<div style="display:flex;flex-direction:column;gap:2px;">';
-    week.forEach(cell => {
-      html += `<div title="${cell.date}: $${fmtN(cell.val)}" style="width:14px;height:14px;border-radius:2px;background:${colors[cell.level]};cursor:default;"></div>`;
-    });
-    html += '</div>';
-  });
-  html += '</div>';
-
-  html += '<div style="display:flex;align-items:center;gap:4px;margin-top:8px;font-size:10px;color:var(--text-tertiary);">Menos ';
-  colors.forEach(c => { html += `<div style="width:12px;height:12px;border-radius:2px;background:${c};"></div>`; });
-  html += ' Más</div>';
-
-  container.innerHTML = html;
-}
-
-function renderMerchantChart(txns) {
-  const merchants = {};
-  txns.filter(t => t.status === 'PAGADO' || t.status === 'A PAGAR').forEach(t => {
-    const key = t.description.toUpperCase();
-    merchants[key] = (merchants[key] || 0) + t.amount;
-  });
-  const sorted = Object.entries(merchants).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  const labels = sorted.map(s => s[0].length > 20 ? s[0].substring(0, 20) + '…' : s[0]);
-  const data = sorted.map(s => s[1]);
-
-  if (chartMerchants) chartMerchants.destroy();
-  const ctx = document.getElementById('chart-merchants');
-  if (!ctx) return;
-  chartMerchants = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{ data: data, backgroundColor: 'rgba(59,130,246,0.6)', borderRadius: 4 }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + fmtN(ctx.raw) } } },
-      scales: {
-        x: { ticks: { color: 'var(--text-secondary)', callback: v => '$' + fmtN(v) }, grid: { color: 'var(--table-border)' } },
-        y: { ticks: { color: 'var(--text-primary)', font: { size: 11 } }, grid: { display: false } }
-      }
-    }
-  });
 }
 
 function init() {
