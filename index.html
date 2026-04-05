@@ -1612,54 +1612,42 @@ tr:hover td { background: var(--table-hover); }
 <div id="page-cuentas" class="page">
   <div class="page-header fade-up">
     <div>
-      <div class="page-title">Cuentas y Billeteras</div>
-      <div class="page-subtitle" id="cuentas-subtitle">Débito · Efectivo · Billeteras virtuales</div>
+      <div class="page-title">Mis Tarjetas</div>
+      <div class="page-subtitle" id="cuentas-subtitle">Débito · Crédito</div>
     </div>
     <div class="header-actions">
-      <select class="filter-select" id="cuentas-month-select" onchange="renderCuentas()">
+      <select class="filter-select" id="cuentas-month-select" onchange="renderCuentas();renderTarjetas()">
         <option value="">Mes actual</option>
       </select>
-      <button class="btn btn-primary" onclick="openEditAccount(null)">＋ Cuenta</button>
     </div>
   </div>
 
   <!-- Saldo total -->
-  <div class="glass-card fade-up d1" style="margin-bottom:0;">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-      <div>
-        <div style="font-size:11px;letter-spacing:.08em;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px;">Saldo total en cuentas</div>
-        <div style="font-size:32px;font-weight:700;color:var(--text-primary);" id="cuentas-total-balance">—</div>
-        <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;" id="cuentas-total-sub">—</div>
+  <div class="glass-card fade-up d1" style="margin-bottom:0;padding:20px 24px;">
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--text-tertiary);text-transform:uppercase;margin-bottom:6px;">Saldo total</div>
+        <div style="font-size:30px;font-weight:700;color:var(--text-primary);letter-spacing:-0.5px;" id="cuentas-total-balance">--</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;" id="cuentas-total-sub">--</div>
       </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;" id="cuentas-summary-pills"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;" id="cuentas-summary-pills"></div>
     </div>
+  </div>
+
+  <!-- ── Sección: Tarjetas de Débito ── -->
+  <div style="margin-top:28px;display:flex;align-items:center;gap:12px;" class="fade-up d2">
+    <h2 style="font-size:17px;font-weight:700;color:var(--text-primary);margin:0;">💳 Tarjetas de Débito</h2>
+    <span id="debit-section-badge" style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--text-secondary);font-weight:500;">0</span>
+    <div style="flex:1;height:1px;background:var(--glass-border);"></div>
+    <button class="btn btn-primary" onclick="openEditAccount(null)" style="font-size:13px;padding:6px 14px;">＋ Cuenta</button>
   </div>
 
   <!-- Account cards -->
-  <div class="fade-up d2" id="accounts-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:16px;"></div>
-
-  <!-- Movimientos del mes por cuenta -->
-  <div class="glass-card fade-up d3" style="padding:0;margin-top:16px;">
-    <div class="table-header">
-      <div class="table-title" id="cuentas-mov-title">Movimientos del mes</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <select class="filter-select filter-select-sm" id="cuentas-filter-account" onchange="renderCuentasMovs()">
-          <option value="">Todas las cuentas</option>
-        </select>
-      </div>
-    </div>
-    <div id="cuentas-movs-list" style="padding:0 18px 18px;"></div>
-  </div>
-
-  <!-- Insights -->
-  <div class="glass-card fade-up d4" style="margin-top:16px;">
-    <div class="chart-card-title" style="margin-bottom:16px;">📊 Insights de cuentas</div>
-    <div id="cuentas-insights" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>
-  </div>
+  <div class="fade-up d2" id="accounts-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:14px;"></div>
 
   <!-- ── Sección: Tarjetas de Crédito ── -->
-  <div class="section-divider fade-up d5" style="margin-top:32px;display:flex;align-items:center;gap:12px;">
-    <h2 style="font-size:18px;font-weight:700;color:var(--text-primary);margin:0;">💳 Tarjetas de Crédito</h2>
+  <div style="margin-top:32px;display:flex;align-items:center;gap:12px;" class="fade-up d3">
+    <h2 style="font-size:17px;font-weight:700;color:var(--text-primary);margin:0;">💳 Tarjetas de Crédito</h2>
     <span id="tc-section-badge" style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--text-secondary);font-weight:500;">0</span>
     <div style="flex:1;height:1px;background:var(--glass-border);"></div>
     <button class="btn btn-primary" onclick="openNewTcModal()" style="font-size:13px;padding:6px 14px;">＋ Nueva tarjeta</button>
@@ -1668,142 +1656,74 @@ tr:hover td { background: var(--table-hover); }
     </select>
   </div>
 
-  <!-- Total banner -->
-  <div class="glass-card tc-total-banner fade-up d5" id="tc-total-banner" style="margin-top:12px;">
-    <div class="tcb-left">
-      <div class="tcb-label">Total en Tarjetas · <span id="tc-banner-month">—</span></div>
-      <div class="tcb-amount" id="tc-total">$0</div>
-      <div class="tcb-sub" id="tc-total-sub">—</div>
-    </div>
-    <div class="tcb-cards-row" id="tcb-chips"></div>
-  </div>
-
-  <!-- Cards grid -->
-  <div class="cards-grid fade-up d5" id="tc-cards-grid" style="margin-top:12px;">
+  <!-- Credit Cards grid -->
+  <div class="fade-up d3" id="tc-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:14px;">
     <div class="empty-state" style="grid-column:1/-1;">
       <div class="empty-icon">💳</div>
       <div class="empty-title">Sin tarjetas configuradas</div>
       <div class="empty-sub">Agregá tus tarjetas y los movimientos se van a asignar automáticamente.</div>
     </div>
   </div>
-
-  <!-- Detalle por tarjeta -->
-  <div class="glass-card table-card fade-up d5" style="margin-top:12px;">
-    <div class="table-header">
-      <div class="table-title">Movimientos por tarjeta</div>
-      <select class="filter-select" id="tc-detail-filter" onchange="renderTcDetail()">
-        <option value="">Todas las tarjetas</option>
-      </select>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Descripción</th>
-            <th>Categoría</th>
-            <th>Cuotas</th>
-            <th style="text-align:right;">Monto</th>
-          </tr>
-        </thead>
-        <tbody id="tc-detail-tbody">
-          <tr><td colspan="5"><div class="empty-state" style="padding:32px;"><div class="empty-sub">Cargá movimientos para ver el detalle.</div></div></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ── Sección: Cuotas ── -->
-  <div class="section-divider fade-up d5" style="margin-top:32px;display:flex;align-items:center;gap:12px;">
-    <h2 style="font-size:18px;font-weight:700;color:var(--text-primary);margin:0;">📋 Cuotas activas</h2>
-    <span id="cuota-section-badge" style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--text-secondary);font-weight:500;">0</span>
-    <div style="flex:1;height:1px;background:var(--glass-border);"></div>
-    <button class="btn btn-primary" onclick="openNewCuota()" style="font-size:13px;padding:6px 14px;">＋ Nueva cuota</button>
-  </div>
-
-  <!-- Cuotas KPIs -->
-  <div class="kpi-grid fade-up d5" style="margin-top:12px;">
-    <div class="glass-card kpi-card">
-      <div class="kpi-label">Cuotas activas</div>
-      <div class="kpi-value" id="cuota-active-count">0</div>
-      <div class="kpi-delta" id="cuota-active-sub">—</div>
-    </div>
-    <div class="glass-card kpi-card">
-      <div class="kpi-label">Gasto mensual en cuotas</div>
-      <div class="kpi-value" id="cuota-monthly">$0</div>
-      <div class="kpi-delta">pagos por mes</div>
-    </div>
-    <div class="glass-card kpi-card">
-      <div class="kpi-label">Deuda total restante</div>
-      <div class="kpi-value" id="cuota-total-debt">$0</div>
-      <div class="kpi-delta">suma de todas las cuotas</div>
-    </div>
-    <div class="glass-card kpi-card">
-      <div class="kpi-label">Más cara por mes</div>
-      <div class="kpi-value" id="cuota-biggest">—</div>
-      <div class="kpi-delta" id="cuota-biggest-sub">—</div>
-    </div>
-  </div>
-
-  <!-- Cuotas list -->
-  <div class="glass-card table-card fade-up d5" style="margin-top:12px;">
-    <div class="table-header">
-      <div class="table-title">Cuotas activas</div>
-    </div>
-    <div id="cuotas-list">
-      <div class="empty-state" style="padding:48px;">
-        <div class="empty-icon">📋</div>
-        <div class="empty-title">Sin cuotas cargadas</div>
-        <div class="empty-sub">Agregá tus cuotas activas para ver el resumen y proyección.</div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Edit Account Modal -->
 <div class="modal-overlay" id="modal-account">
-  <div class="modal-box">
+  <div class="modal">
     <div class="modal-title" id="modal-account-title">Nueva cuenta</div>
+    <div class="modal-sub">Configurá tu tarjeta de débito</div>
     <input type="hidden" id="acc-edit-id">
-    <div class="form-group">
-      <label class="form-label">Nombre</label>
-      <input class="form-input" id="acc-edit-name" placeholder="Ej: Brubank">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Ícono</label>
-      <input class="form-input" id="acc-edit-icon" placeholder="Ej: 🏦" maxlength="2">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Saldo actual</label>
-        <input class="form-input" id="acc-edit-balance" type="number" placeholder="0">
+
+    <!-- Preview card -->
+    <div id="acc-preview-card" style="display:none;background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:12px;padding:16px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div id="acc-preview-icon" style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🏦</div>
+        <div style="flex:1;min-width:0;">
+          <div id="acc-preview-name" style="font-size:14px;font-weight:600;color:var(--text-primary);">Cuenta</div>
+          <div id="acc-preview-currency" style="font-size:11px;color:var(--text-tertiary);">ARS</div>
+        </div>
+        <div id="acc-preview-balance" style="font-size:16px;font-weight:700;color:var(--text-primary);">$0</div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Moneda</label>
-        <select class="form-input" id="acc-edit-currency">
+    </div>
+
+    <div class="modal-grid">
+      <div class="input-group">
+        <div class="input-label">Nombre</div>
+        <input type="text" class="input-field" id="acc-edit-name" placeholder="Ej: Brubank" oninput="updateAccPreview()">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Icono</div>
+        <input type="text" class="input-field" id="acc-edit-icon" placeholder="Ej: 🏦" maxlength="2" oninput="updateAccPreview()">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Saldo inicial</div>
+        <input type="number" class="input-field" id="acc-edit-balance" placeholder="0" oninput="updateAccPreview()">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Moneda</div>
+        <select class="input-field" id="acc-edit-currency" onchange="updateAccPreview()">
           <option value="ARS">ARS</option>
           <option value="USD">USD</option>
         </select>
       </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Color</label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="acc-color-picker">
-        <div onclick="selectAccColor(this,'#3B82F6')" class="color-swatch" style="background:#3B82F6;" data-color="#3B82F6"></div>
-        <div onclick="selectAccColor(this,'#34D399')" class="color-swatch" style="background:#34D399;" data-color="#34D399"></div>
-        <div onclick="selectAccColor(this,'#F87171')" class="color-swatch" style="background:#F87171;" data-color="#F87171"></div>
-        <div onclick="selectAccColor(this,'#FBBF24')" class="color-swatch" style="background:#FBBF24;" data-color="#FBBF24"></div>
-        <div onclick="selectAccColor(this,'#A78BFA')" class="color-swatch" style="background:#A78BFA;" data-color="#A78BFA"></div>
-        <div onclick="selectAccColor(this,'#FB923C')" class="color-swatch" style="background:#FB923C;" data-color="#FB923C"></div>
-        <div onclick="selectAccColor(this,'#60A5FA')" class="color-swatch" style="background:#60A5FA;" data-color="#60A5FA"></div>
-        <div onclick="selectAccColor(this,'#F472B6')" class="color-swatch" style="background:#F472B6;" data-color="#F472B6"></div>
+      <div class="input-group modal-full">
+        <div class="input-label">Color</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0;" id="acc-color-picker">
+          <div onclick="selectAccColor(this,'#3B82F6')" style="width:32px;height:32px;border-radius:50%;background:#3B82F6;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#3B82F6"></div>
+          <div onclick="selectAccColor(this,'#34D399')" style="width:32px;height:32px;border-radius:50%;background:#34D399;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#34D399"></div>
+          <div onclick="selectAccColor(this,'#F87171')" style="width:32px;height:32px;border-radius:50%;background:#F87171;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#F87171"></div>
+          <div onclick="selectAccColor(this,'#FBBF24')" style="width:32px;height:32px;border-radius:50%;background:#FBBF24;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#FBBF24"></div>
+          <div onclick="selectAccColor(this,'#A78BFA')" style="width:32px;height:32px;border-radius:50%;background:#A78BFA;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#A78BFA"></div>
+          <div onclick="selectAccColor(this,'#FB923C')" style="width:32px;height:32px;border-radius:50%;background:#FB923C;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#FB923C"></div>
+          <div onclick="selectAccColor(this,'#60A5FA')" style="width:32px;height:32px;border-radius:50%;background:#60A5FA;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#60A5FA"></div>
+          <div onclick="selectAccColor(this,'#F472B6')" style="width:32px;height:32px;border-radius:50%;background:#F472B6;cursor:pointer;transition:all .15s;border:3px solid transparent;" data-color="#F472B6"></div>
+        </div>
+        <input type="hidden" id="acc-edit-color" value="#3B82F6">
       </div>
-      <input type="hidden" id="acc-edit-color" value="#3B82F6">
     </div>
     <div class="modal-actions">
+      <button class="btn btn-danger" id="acc-delete-btn" onclick="deleteAccount()" style="display:none;margin-right:auto;">Eliminar</button>
       <button class="btn btn-glass" onclick="closeModal('modal-account')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveAccount()">Guardar</button>
-      <button class="btn btn-danger" id="acc-delete-btn" onclick="deleteAccount()" style="display:none;">Eliminar</button>
     </div>
   </div>
 </div>
@@ -5020,87 +4940,64 @@ function renderTarjetas() {
   const [pY,pM] = mk.split('-').map(Number);
   const monthTxns = state.transactions.filter(t => getMonthKey(t.date)===mk && t.tcId);
 
-  // Chips in banner
-  const tcChips = document.getElementById('tcb-chips');
-  const tcTotal = document.getElementById('tc-total');
-  const tcTotalSub = document.getElementById('tc-total-sub');
-  const tcBannerMonth = document.getElementById('tc-banner-month');
-  tcBannerMonth.textContent = MNAMES[pM-1].toUpperCase() + ' ' + pY;
-
-  if (!state.creditCards.length) {
-    tcTotal.textContent = '$0';
-    tcTotalSub.textContent = 'Agregá tus tarjetas en Configuración';
-    tcChips.innerHTML = '';
-  } else {
-    let grandTotal = 0;
-    const chipHTMLs = [];
-    state.creditCards.forEach(tc => {
-      const tcTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='ARS');
-      const total = tcTxns.reduce((s,t)=>s+t.amount,0);
-      grandTotal += total;
-      chipHTMLs.push(`<div class="tcb-card-chip">
-        <div class="tcb-chip-name" style="color:${tc.color}">${esc(tc.name)}</div>
-        <div class="tcb-chip-amount">$${fmtN(total)}</div>
-      </div>`);
-    });
-    tcTotal.textContent = '$' + fmtN(grandTotal);
-    tcTotalSub.textContent = state.creditCards.length + ' tarjeta' + (state.creditCards.length!==1?'s':'') + ' · ' + monthTxns.length + ' movimiento' + (monthTxns.length!==1?'s':'');
-    tcChips.innerHTML = chipHTMLs.join('');
-  }
-
-  // Cards grid
-  const grid = document.getElementById('tc-cards-grid');
-  if (!state.creditCards.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">💳</div><div class="empty-title">Sin tarjetas</div><div class="empty-sub">Agregá tus tarjetas en Configuración.</div></div>';
-  } else {
-    grid.innerHTML = state.creditCards.map(tc => {
-      const tcTxns = monthTxns.filter(t=>t.tcId===tc.id && t.currency==='ARS');
-      const total = tcTxns.reduce((s,t)=>s+t.amount,0);
-      const pct = tc.limit > 0 ? Math.round(total/tc.limit*100) : null;
-      const typeEmoji = {VISA:'💳',MASTERCARD:'💳',AMEX:'💎',NARANJA:'🟠',OTRO:'💳'}[tc.type]||'💳';
-      return `<div class="glass-card tc-card" style="position:relative;">
-        <div class="tc-card-shimmer" style="background:linear-gradient(135deg,${tc.color}12 0%,transparent 60%)"></div>
-        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${tc.color};border-radius:2px 2px 0 0;"></div>
-        <div class="tc-card-name" style="color:${tc.color}">${esc(tc.name)}</div>
-        <div class="tc-card-amount">$${fmtN(total)}</div>
-        <div class="tc-card-limit-row">
-          <div class="tc-card-limit">${tc.limit>0?'Límite: $'+fmtN(tc.limit):'Sin límite'} · ${tcTxns.length} mov.</div>
-          ${pct!==null?`<div class="tc-card-pct" style="color:${pct>=90?'var(--red)':pct>=70?'var(--orange)':'var(--green)'}">${pct}%</div>`:''}
-        </div>
-        ${tc.limit>0?`<div class="tc-bar"><div class="tc-bar-fill" style="width:${Math.min(100,pct||0)}%;background:${(pct||0)>=90?'var(--red)':(pct||0)>=70?'var(--orange)':tc.color}"></div></div>`:''}
-        <div class="tc-card-logo">${typeEmoji}</div>
-      </div>`;
+  // Populate month selector
+  const tcSel = document.getElementById('tc-month-select');
+  if (tcSel) {
+    const months = allMonths();
+    tcSel.innerHTML = months.map(m => {
+      const [y,mo] = m.split('-').map(Number);
+      return `<option value="${m}" ${m===mk?'selected':''}>${MNAMES[mo-1]} ${y}</option>`;
     }).join('');
   }
 
-  renderTcDetail();
-}
-
-function renderTcDetail() {
-  const tcFilter = document.getElementById('tc-detail-filter');
-  const mk = getTcMonth();
-  let txns = state.transactions.filter(t => getMonthKey(t.date)===mk && t.tcId);
-  if (tcFilter?.value) txns = txns.filter(t=>t.tcId===tcFilter.value);
-  txns.sort((a,b)=>new Date(b.date)-new Date(a.date));
-
-  const tbody = document.getElementById('tc-detail-tbody');
-  if (!txns.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:32px;"><div class="empty-sub">Sin movimientos de tarjeta en este período.</div></div></td></tr>';
-    return;
+  const grid = document.getElementById('tc-cards-grid');
+  if (!state.creditCards.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:48px;"><div class="empty-icon">💳</div><div class="empty-title">Sin tarjetas de crédito</div><div class="empty-sub">Agregá tus tarjetas para ver el resumen de gastos y disponible.</div></div>';
+  } else {
+    grid.innerHTML = state.creditCards.map(tc => {
+      const tcTxns = monthTxns.filter(t=>t.tcId===tc.id);
+      const spent = tcTxns.reduce((s,t)=>s+t.amount,0);
+      const available = tc.limit > 0 ? tc.limit - spent : 0;
+      const pct = tc.limit > 0 ? Math.round(spent/tc.limit*100) : 0;
+      const availPct = tc.limit > 0 ? available/tc.limit*100 : 100;
+      const availColor = availPct > 50 ? 'var(--green)' : availPct > 30 ? 'var(--orange)' : 'var(--red)';
+      const barColor = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--orange)' : tc.color;
+      const typeBadge = tc.type || 'OTRO';
+      return `<div class="glass-card" style="position:relative;overflow:hidden;padding:20px;">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${tc.color};"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-size:15px;font-weight:600;color:${tc.color};">${esc(tc.name)}</div>
+            <span style="background:${tc.color}18;color:${tc.color};font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.04em;">${typeBadge}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-tertiary);">${tcTxns.length} mov.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Limite</div>
+            <div style="font-size:15px;font-weight:700;color:var(--text-primary);">${tc.limit>0?'$'+fmtN(tc.limit):'--'}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Gastado</div>
+            <div style="font-size:15px;font-weight:700;color:var(--text-primary);">$${fmtN(spent)}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Disponible</div>
+            <div style="font-size:15px;font-weight:700;color:${availColor};">${tc.limit>0?'$'+fmtN(available):'--'}</div>
+          </div>
+        </div>
+        ${tc.limit>0?`<div style="width:100%;height:6px;background:var(--bg-surface);border-radius:3px;overflow:hidden;">
+          <div style="width:${Math.min(100,pct)}%;height:100%;background:${barColor};border-radius:3px;transition:width .3s ease;"></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+          <span style="font-size:11px;font-weight:600;color:${barColor};">${pct}% usado</span>
+        </div>`:''}
+      </div>`;
+    }).join('');
   }
-  tbody.innerHTML = txns.map(t => {
-    const d = t.date instanceof Date ? t.date : new Date(t.date);
-    const tc = state.creditCards.find(c=>c.id===t.tcId);
-    const cuotaStr = t.cuotaNum && t.cuotaTotal ? `${t.cuotaNum}/${t.cuotaTotal}` : '—';
-    return `<tr>
-      <td style="color:var(--text-tertiary);font-size:12px;">${d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>
-      <td class="td-desc">${esc(t.description)}</td>
-      <td><span class="badge" style="background:${catColor(t.category||'Otros')}22;color:${catColor(t.category||'Otros')};border:1px solid ${catColor(t.category||'Otros')}33;">${esc(t.category||'Otros')}</span></td>
-      <td style="font-size:12px;color:var(--text-tertiary);">${cuotaStr}</td>
-      <td class="td-amount">$${fmtN(t.amount)}</td>
-    </tr>`;
-  }).join('');
 }
+
+function renderTcDetail() { /* removed — no longer used */ }
 
 // ═══════════════════════════════════════════════
 //  CUOTAS
@@ -5158,14 +5055,16 @@ function renderCuotas() {
   const totalDebt = active.reduce((s,c)=>s+(c.amount*(c.total-c.paid))*(c.currency==='ARS'?1:state.usdRate),0);
   const biggest = active.sort((a,b)=>b.amount-a.amount)[0];
 
-  document.getElementById('cuota-active-count').textContent = active.length;
-  document.getElementById('cuota-active-sub').textContent = done.length + ' finalizadas';
-  document.getElementById('cuota-monthly').textContent = '$'+fmtN(monthly);
-  document.getElementById('cuota-total-debt').textContent = '$'+fmtN(totalDebt);
-  document.getElementById('cuota-biggest').textContent = biggest ? '$'+fmtN(biggest.amount) : '—';
-  document.getElementById('cuota-biggest-sub').textContent = biggest ? biggest.description : '—';
+  const el = (id) => document.getElementById(id);
+  if (el('cuota-active-count')) el('cuota-active-count').textContent = active.length;
+  if (el('cuota-active-sub')) el('cuota-active-sub').textContent = done.length + ' finalizadas';
+  if (el('cuota-monthly')) el('cuota-monthly').textContent = '$'+fmtN(monthly);
+  if (el('cuota-total-debt')) el('cuota-total-debt').textContent = '$'+fmtN(totalDebt);
+  if (el('cuota-biggest')) el('cuota-biggest').textContent = biggest ? '$'+fmtN(biggest.amount) : '—';
+  if (el('cuota-biggest-sub')) el('cuota-biggest-sub').textContent = biggest ? biggest.description : '—';
 
   const list = document.getElementById('cuotas-list');
+  if (!list) return;
   if (!state.cuotas.length) {
     list.innerHTML = '<div class="empty-state" style="padding:48px;"><div class="empty-icon">📋</div><div class="empty-title">Sin cuotas</div></div>';
     return;
@@ -6090,6 +5989,20 @@ function getCuentasMonth() {
   return sel?.value || getMonthKey(new Date());
 }
 
+function calcAccountBalance(accName) {
+  // Calculate balance from ALL transactions for this bank (all time)
+  const name = accName.toUpperCase();
+  return state.transactions.filter(t => {
+    if (t.source !== 'cuenta') return false;
+    const b = (t.bank||'').toUpperCase();
+    return b === name || b.includes(name) || name.includes(b);
+  }).reduce((sum, t) => {
+    if (t.status === 'COBRADO') return sum + t.amount;
+    if (['PAGADO','A PAGAR'].includes(t.status||'')) return sum - t.amount;
+    return sum;
+  }, 0);
+}
+
 function renderCuentas() {
   if (!state.accounts) state.accounts = [];
 
@@ -6106,25 +6019,33 @@ function renderCuentas() {
   const [pY, pM] = mk.split('-').map(Number);
   const monthTxns = state.transactions.filter(t => getMonthKey(t.date) === mk && t.source === 'cuenta');
 
-  // Total balances
-  const arsTotal = state.accounts.filter(a=>a.currency==='ARS').reduce((s,a)=>s+a.balance,0);
-  const usdTotal = state.accounts.filter(a=>a.currency==='USD').reduce((s,a)=>s+a.balance,0);
-  document.getElementById('cuentas-total-balance').textContent = '$'+fmtN(arsTotal);
-  document.getElementById('cuentas-total-sub').textContent =
-    (usdTotal > 0 ? `U$D ${fmtN(usdTotal)} · ` : '') + state.accounts.length + ' cuentas activas';
+  // Badge count
+  const debitBadge = document.getElementById('debit-section-badge');
+  if (debitBadge) debitBadge.textContent = state.accounts.length;
 
-  // Summary pills — compact account overview
+  // Use manual balances (updated by user in account settings)
+  const arsTotal = state.accounts.filter(a=>a.currency==='ARS').reduce((s,a)=>s+(a.balance||0),0);
+  const usdTotal = state.accounts.filter(a=>a.currency==='USD').reduce((s,a)=>s+(a.balance||0),0);
+  document.getElementById('cuentas-total-balance').textContent = '$'+fmtN(arsTotal);
+  const parts = [];
+  if (usdTotal !== 0) parts.push('U$D ' + fmtN(usdTotal));
+  parts.push(state.accounts.length + ' cuenta' + (state.accounts.length !== 1 ? 's' : ''));
+  document.getElementById('cuentas-total-sub').textContent = parts.join(' · ');
+
+  // Summary pills
   const pills = document.getElementById('cuentas-summary-pills');
-  pills.innerHTML = state.accounts.map(a => `
-    <div style="display:flex;align-items:center;gap:8px;background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:10px;padding:6px 14px 6px 8px;cursor:pointer;transition:all .15s ease;" onclick="openEditAccount('${a.id}')" onmouseover="this.style.borderColor='var(--glass-border-bright)'" onmouseout="this.style.borderColor='var(--glass-border)'">
+  pills.innerHTML = state.accounts.map(a => {
+    const bal = a.balance || 0;
+    return `<div style="display:flex;align-items:center;gap:8px;background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:10px;padding:6px 14px 6px 8px;cursor:pointer;transition:all .15s ease;" onclick="openEditAccount('${a.id}')" onmouseover="this.style.borderColor='var(--glass-border-bright)'" onmouseout="this.style.borderColor='var(--glass-border)'">
       <div style="width:28px;height:28px;border-radius:8px;background:${a.color}18;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">${a.icon}</div>
       <div>
         <div style="font-size:11px;color:var(--text-tertiary);line-height:1.2;">${a.name}</div>
-        <div style="font-size:13px;font-weight:600;color:${a.color};line-height:1.3;">${a.currency==='USD'?'U$D ':'$'}${fmtN(a.balance)}</div>
+        <div style="font-size:13px;font-weight:600;color:${bal >= 0 ? a.color : 'var(--red)'};line-height:1.3;">${a.currency==='USD'?'U$D ':'$'}${fmtN(bal)}</div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
-  // Account cards — Apple Wallet style
+  // Account cards
   const grid = document.getElementById('accounts-grid');
   grid.innerHTML = state.accounts.map(a => {
     const accBancoName = a.name.toUpperCase();
@@ -6134,7 +6055,8 @@ function renderCuentas() {
     });
     const gastos = accTxns.filter(t=>['PAGADO','A PAGAR'].includes(t.status||'')).reduce((s,t)=>s+t.amount,0);
     const ingresos = accTxns.filter(t=>t.status==='COBRADO').reduce((s,t)=>s+t.amount,0);
-    const balanceColor = a.balance >= 0 ? a.color : 'var(--red)';
+    const bal = a.balance || 0;
+    const balanceColor = bal >= 0 ? a.color : 'var(--red)';
     return `
     <div class="account-card">
       <div class="account-card-header">
@@ -6143,25 +6065,27 @@ function renderCuentas() {
         </div>
         <div style="min-width:0;flex:1;">
           <div class="account-card-name">${a.name}</div>
-          <div class="account-card-currency">${a.currency}</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div class="account-card-currency">${a.currency}</div>
+          </div>
         </div>
         <button class="account-card-edit" onclick="openEditAccount('${a.id}')" title="Editar">✏️</button>
       </div>
       <div class="account-card-balance">
-        <div class="account-card-balance-label">Saldo disponible</div>
-        <div class="account-card-balance-amount" style="color:${balanceColor};">${a.currency==='USD'?'U$D ':'$'}${fmtN(a.balance)}</div>
+        <div class="account-card-balance-label">Saldo</div>
+        <div class="account-card-balance-amount" style="color:${balanceColor};">${a.currency==='USD'?'U$D ':'$'}${fmtN(bal)}</div>
       </div>
       <div class="account-card-footer">
         <div class="account-card-stat">
-          <div class="account-card-stat-label">Gastos</div>
+          <div class="account-card-stat-label">Gastos del mes</div>
           <div class="account-card-stat-value" style="color:var(--red);">-$${fmtN(gastos)}</div>
         </div>
         <div class="account-card-stat">
-          <div class="account-card-stat-label">Ingresos</div>
+          <div class="account-card-stat-label">Ingresos del mes</div>
           <div class="account-card-stat-value" style="color:var(--green);">+$${fmtN(ingresos)}</div>
         </div>
         <div class="account-card-stat">
-          <div class="account-card-stat-label">Movs.</div>
+          <div class="account-card-stat-label">Movimientos</div>
           <div class="account-card-stat-value">${accTxns.length}</div>
         </div>
       </div>
@@ -6171,84 +6095,11 @@ function renderCuentas() {
       <div class="account-card-add-icon">＋</div>
       <div style="font-size:13px;font-weight:500;">Agregar cuenta</div>
     </div>`;
-
-  // Populate account filter
-  const accSel = document.getElementById('cuentas-filter-account');
-  accSel.innerHTML = '<option value="">Todas las cuentas</option>' +
-    state.accounts.map(a=>`<option value="${a.name.toUpperCase()}">${a.name}</option>`).join('');
-
-  document.getElementById('cuentas-mov-title').textContent =
-    `Movimientos de ${MNAMES[pM-1]} ${pY} · ${monthTxns.length} movimientos`;
-
-  renderCuentasMovs();
-  renderCuentasInsights(monthTxns, mk);
 }
 
-function renderCuentasMovs() {
-  const mk = getCuentasMonth();
-  const filterAcc = document.getElementById('cuentas-filter-account')?.value || '';
-  let txns = state.transactions.filter(t => getMonthKey(t.date) === mk && t.source === 'cuenta');
-  if (filterAcc) txns = txns.filter(t => (t.bank||'').toUpperCase() === filterAcc || (t.bank||'').toUpperCase().includes(filterAcc));
-  txns = txns.sort((a,b) => new Date(b.date)-new Date(a.date)).slice(0, 60);
+function renderCuentasMovs() { /* removed — no longer used */ }
 
-  const container = document.getElementById('cuentas-movs-list');
-  if (!txns.length) {
-    container.innerHTML = '<div style="text-align:center;color:var(--text-tertiary);padding:24px;">Sin movimientos de débito este mes</div>';
-    return;
-  }
-  container.innerHTML = txns.map(t => {
-    const isGasto = ['PAGADO','A PAGAR'].includes(t.status||'PAGADO');
-    const sign = isGasto ? '-' : '+';
-    const col = isGasto ? 'var(--red)' : 'var(--green)';
-    const d = t.date instanceof Date ? t.date : new Date(t.date);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--table-border);">
-      <div style="width:34px;height:34px;border-radius:50%;background:var(--bg-surface);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">
-        ${getCatEmoji(t.category)}
-      </div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.description)}</div>
-        <div style="font-size:11px;color:var(--text-secondary);">${t.category||'—'} · ${t.bank||'—'} · ${d.getDate()}/${d.getMonth()+1}</div>
-      </div>
-      <div style="font-size:14px;font-weight:600;color:${col};white-space:nowrap;">${sign}$${fmtN(t.amount)}</div>
-    </div>`;
-  }).join('');
-}
-
-function renderCuentasInsights(monthTxns, mk) {
-  const gastos = monthTxns.filter(t=>['PAGADO','A PAGAR'].includes(t.status||'PAGADO'));
-  const ingresos = monthTxns.filter(t=>t.status==='COBRADO');
-  const totalGastos = gastos.reduce((s,t)=>s+t.amount,0);
-  const totalIngresos = ingresos.reduce((s,t)=>s+t.amount,0);
-  const [pY,pM] = mk.split('-').map(Number);
-  const daysInMonth = new Date(pY,pM,0).getDate();
-
-  // By bank
-  const byBank = {};
-  gastos.forEach(t => { byBank[t.bank||'Sin banco'] = (byBank[t.bank||'Sin banco']||0)+t.amount; });
-  const topBank = Object.entries(byBank).sort((a,b)=>b[1]-a[1])[0];
-
-  // By category
-  const byCat = {};
-  gastos.forEach(t => { byCat[t.category||'Otros'] = (byCat[t.category||'Otros']||0)+t.amount; });
-  const topCat = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
-
-  const insights = [
-    { icon:'💸', label:'Gasto débito total', value:'$'+fmtN(totalGastos), sub: gastos.length+' transacciones' },
-    { icon:'📥', label:'Ingresos recibidos', value:'$'+fmtN(totalIngresos), sub: ingresos.length+' depósitos' },
-    { icon:'📅', label:'Gasto diario promedio', value:'$'+fmtN(totalGastos/daysInMonth), sub:'por día en '+MNAMES[pM-1] },
-    { icon:'🏦', label:'Cuenta más usada', value: topBank?topBank[0]:'—', sub: topBank?'$'+fmtN(topBank[1])+' gastado':'sin datos' },
-    { icon:'🏷️', label:'Categoría top', value: topCat?topCat[0]:'—', sub: topCat?'$'+fmtN(topCat[1]):'sin datos' },
-    { icon:'⚖️', label:'Flujo neto', value: (totalIngresos-totalGastos>=0?'+':'')+'$'+fmtN(totalIngresos-totalGastos), sub:'ingresos − gastos débito' },
-  ];
-
-  document.getElementById('cuentas-insights').innerHTML = insights.map(ins=>`
-    <div style="background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:12px;padding:16px 18px;">
-      <div style="font-size:20px;margin-bottom:6px;">${ins.icon}</div>
-      <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">${ins.label}</div>
-      <div style="font-size:16px;font-weight:700;">${ins.value}</div>
-      <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;">${ins.sub}</div>
-    </div>`).join('');
-}
+function renderCuentasInsights() { /* removed — no longer used */ }
 
 function getCatEmoji(cat) {
   const map = {'Gastronomía':'🍽️','Transporte':'🚗','Compras':'🛍️','Cuentas':'📄','Personal':'👤',
@@ -6268,18 +6119,42 @@ function openEditAccount(id) {
   document.getElementById('acc-delete-btn').style.display = acc ? 'block' : 'none';
   _accEditColor = acc?.color || '#3B82F6';
   document.getElementById('acc-edit-color').value = _accEditColor;
-  document.querySelectorAll('#acc-color-picker .color-swatch').forEach(sw => {
-    sw.style.outline = sw.dataset.color === _accEditColor ? '2px solid white' : 'none';
+  // Update color circle selection
+  document.querySelectorAll('#acc-color-picker div[data-color]').forEach(sw => {
+    sw.style.border = sw.dataset.color === _accEditColor ? '3px solid var(--text-primary)' : '3px solid transparent';
+    sw.style.transform = sw.dataset.color === _accEditColor ? 'scale(1.15)' : 'scale(1)';
   });
-  document.getElementById('modal-account').classList.add('open');
+  // Show/hide preview card
+  const preview = document.getElementById('acc-preview-card');
+  preview.style.display = acc ? 'block' : 'none';
+  if (acc) updateAccPreview();
+  openModal('modal-account');
+}
+
+function updateAccPreview() {
+  const name = document.getElementById('acc-edit-name').value || 'Cuenta';
+  const icon = document.getElementById('acc-edit-icon').value || '🏦';
+  const bal = parseFloat(document.getElementById('acc-edit-balance').value) || 0;
+  const cur = document.getElementById('acc-edit-currency').value || 'ARS';
+  const color = document.getElementById('acc-edit-color').value || '#3B82F6';
+  const preview = document.getElementById('acc-preview-card');
+  if (document.getElementById('acc-edit-id').value) preview.style.display = 'block';
+  document.getElementById('acc-preview-icon').style.background = color + '18';
+  document.getElementById('acc-preview-icon').textContent = icon;
+  document.getElementById('acc-preview-name').textContent = name;
+  document.getElementById('acc-preview-currency').textContent = cur;
+  document.getElementById('acc-preview-balance').textContent = (cur==='USD'?'U$D ':'$') + fmtN(bal);
+  document.getElementById('acc-preview-balance').style.color = color;
 }
 
 function selectAccColor(el, color) {
   _accEditColor = color;
   document.getElementById('acc-edit-color').value = color;
-  document.querySelectorAll('#acc-color-picker .color-swatch').forEach(sw => {
-    sw.style.outline = sw.dataset.color === color ? '2px solid white' : 'none';
+  document.querySelectorAll('#acc-color-picker div[data-color]').forEach(sw => {
+    sw.style.border = sw.dataset.color === color ? '3px solid var(--text-primary)' : '3px solid transparent';
+    sw.style.transform = sw.dataset.color === color ? 'scale(1.15)' : 'scale(1)';
   });
+  updateAccPreview();
 }
 
 function saveAccount() {
