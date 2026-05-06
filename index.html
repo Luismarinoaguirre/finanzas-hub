@@ -1561,6 +1561,7 @@ tr:hover td { background: var(--table-hover); }
     <div class="header-actions">
       <button class="btn btn-glass" onclick="openNewTxn()">＋ Nuevo</button>
       <button class="btn btn-glass" onclick="exportCSV()">↓ Exportar</button>
+      <button class="btn btn-glass" onclick="openDupeCleanup()" title="Buscar movimientos duplicados" style="color:var(--orange)">⚠ Duplicados</button>
     </div>
   </div>
 
@@ -2454,6 +2455,18 @@ tr:hover td { background: var(--table-hover); }
   </div>
 </div>
 
+<!-- Dupe Cleanup -->
+<div class="modal-overlay" id="modal-dupe-cleanup">
+  <div class="modal" style="width:680px;max-width:96vw;">
+    <div class="modal-title">⚠ Duplicados detectados</div>
+    <div class="modal-sub" id="dupe-cleanup-sub">Analizando movimientos…</div>
+    <div id="dupe-cleanup-list" style="max-height:52vh;overflow-y:auto;margin:16px 0;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-glass" onclick="closeModal('modal-dupe-cleanup')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- New Credit Card -->
 <div class="modal-overlay" id="modal-tc">
   <div class="modal">
@@ -3277,7 +3290,9 @@ function showImportError(filename, msg, detail='') {
 }
 
 function showImportReview(txns, dupes, filename) {
-  _importPending = txns;
+  // Merge dupes into the main list, tagged so user can decide
+  dupes.forEach(t => { t.isDupe = true; t._incluir = false; });
+  _importPending = [...txns, ...dupes];
   _importDupes   = dupes;
   _importFilter  = 'all';
 
@@ -3285,17 +3300,18 @@ function showImportReview(txns, dupes, filename) {
   document.getElementById('import-error').style.display   = 'none';
   document.getElementById('import-review').style.display  = 'block';
 
-  const total = txns.length, sinCat = txns.filter(t => !t.category).length;
+  const newCount = txns.length, dupeCount = dupes.length;
+  const sinCat = txns.filter(t => !t.category).length;
   const arsTotal = txns.filter(t=>t.currency==='ARS'&&t.status==='PAGADO').reduce((s,t)=>s+t.amount,0);
   const usdTotal = txns.filter(t=>t.currency==='USD'&&t.status==='PAGADO').reduce((s,t)=>s+t.amount,0);
 
   document.getElementById('import-review-title').textContent = 'Revisar importación — ' + filename;
   document.getElementById('import-review-sub').textContent =
-    total + ' movimientos nuevos · ' + dupes.length + ' duplicados ignorados';
+    newCount + ' nuevos' + (dupeCount ? ' · ' + dupeCount + ' posibles duplicados (revisá y decidí)' : '');
 
   const pills = [
-    { label: total + ' nuevos', color: 'var(--green)' },
-    dupes.length ? { label: dupes.length + ' duplicados', color: 'var(--orange)' } : null,
+    { label: newCount + ' nuevos', color: 'var(--green)' },
+    dupeCount ? { label: dupeCount + ' duplicados', color: 'var(--orange)' } : null,
     sinCat ? { label: sinCat + ' sin categoría', color: 'var(--purple)' } : null,
     arsTotal ? { label: '$' + fmtN(arsTotal) + ' ARS', color: 'var(--blue-light)' } : null,
     usdTotal ? { label: 'U$D ' + fmtN(usdTotal), color: 'var(--teal)' } : null,
@@ -3305,14 +3321,21 @@ function showImportReview(txns, dupes, filename) {
   ).join('');
 
   document.getElementById('ifilter-sin-cat').textContent = 'Sin categoría (' + sinCat + ')';
-  document.getElementById('ifilter-duplicados').textContent = 'Duplicados (' + dupes.length + ')';
-  document.getElementById('import-confirm-label').textContent = 'Confirmar ' + total + ' movimientos';
+  document.getElementById('ifilter-duplicados').textContent = 'Duplicados (' + dupeCount + ')';
+  updateImportConfirmLabel();
   document.getElementById('import-footer-note').textContent =
-    sinCat ? '⚠ ' + sinCat + ' movimientos sin categoría — podés asignarlas antes de confirmar' : '✓ Todos los movimientos tienen categoría';
+    sinCat ? '⚠ ' + sinCat + ' sin categoría · los duplicados NO se importan salvo que los incluyas' :
+    dupeCount ? 'ℹ Los duplicados NO se importan salvo que toques "Incluir" en cada uno' :
+    '✓ Todos los movimientos tienen categoría';
 
   document.getElementById('import-search').value = '';
   renderImportList();
   document.getElementById('modal-import').classList.add('open');
+}
+
+function updateImportConfirmLabel() {
+  const toImport = _importPending.filter(t => !t.isDupe || t._incluir).length;
+  document.getElementById('import-confirm-label').textContent = 'Confirmar ' + toImport + ' movimientos';
 }
 
 function setImportFilter(f) {
@@ -3327,8 +3350,9 @@ function renderImportList() {
   const search = (document.getElementById('import-search')?.value||'').toLowerCase();
   const cats = getSortedCategories();
 
-  let items = _importFilter === 'duplicados' ? _importDupes : _importPending;
-  if (_importFilter === 'sin-cat') items = _importPending.filter(t => !t.category);
+  let items = _importPending;
+  if (_importFilter === 'duplicados') items = _importPending.filter(t => t.isDupe);
+  else if (_importFilter === 'sin-cat') items = _importPending.filter(t => !t.category && !t.isDupe);
   if (search) items = items.filter(t =>
     (t.description||'').toLowerCase().includes(search) ||
     (t.category||'').toLowerCase().includes(search) ||
@@ -3338,39 +3362,76 @@ function renderImportList() {
   const container = document.getElementById('import-txn-list');
   if (!items.length) {
     container.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-tertiary);font-size:13px;">' +
-      (_importFilter==='duplicados' ? 'No hay duplicados detectados' :
+      (_importFilter==='duplicados' ? '✓ No hay duplicados detectados' :
        _importFilter==='sin-cat' ? '✓ Todos tienen categoría asignada' : 'Sin resultados') + '</div>';
     return;
   }
 
-  const isDupeView = _importFilter === 'duplicados';
-  container.innerHTML = items.map((t, idx) => {
+  container.innerHTML = items.map(t => {
+    const realIdx = _importPending.indexOf(t);
     const d = t.date instanceof Date ? t.date : new Date(t.date);
     const dateStr = d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear();
     const isGasto = t.status === 'PAGADO';
     const amtCol = isGasto ? 'var(--red)' : 'var(--green)';
     const amtSign = isGasto ? '-' : '+';
-    const realIdx = _importPending.indexOf(t);
 
-    const catSelect = isDupeView ? `<span style="font-size:11px;color:var(--text-tertiary);">duplicado</span>` :
-      `<select onchange="setImportTxnCat(${realIdx},this.value)" style="background:var(--glass);border:1px solid var(--glass-border);border-radius:6px;font-size:11px;color:var(--text-secondary);padding:3px 6px;outline:none;cursor:pointer;max-width:120px;">
-        <option value="">${t.category ? '' : '⚠ '} ${t.category || 'Sin categoría'}</option>
-        ${cats.map(c => `<option value="${esc(c)}" ${c===t.category?'selected':''}>${esc(c)}</option>`).join('')}
-      </select>`;
+    // Amount display (with shared split indicator)
+    const displayAmt = t.shared
+      ? `<div style="text-align:right;">
+           <div style="font-size:13px;font-weight:600;color:${amtCol};">${amtSign}${t.currency==='USD'?'U$D ':'$'}${fmtN(t.amount)}</div>
+           <div style="font-size:10px;color:var(--text-tertiary);">de ${t.currency==='USD'?'U$D ':'$'}${fmtN(t._originalAmount)} ÷${t.sharedPeople}</div>
+         </div>`
+      : `<div style="font-size:13px;font-weight:600;color:${amtCol};white-space:nowrap;min-width:80px;text-align:right;">${amtSign}${t.currency==='USD'?'U$D ':'$'}${fmtN(t.amount)}</div>`;
 
-    const rowBg = !t.category && !isDupeView ? 'background:var(--purple-glow);' : isDupeView ? 'background:var(--orange-glow);opacity:0.7;' : '';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--table-border);${rowBg}">
+    if (t.isDupe) {
+      // Duplicate row: show with orange warning, let user include or discard
+      const includedStyle = t._incluir
+        ? 'background:rgba(34,197,94,0.07);border-left:3px solid var(--green);'
+        : 'background:rgba(251,146,60,0.07);border-left:3px solid var(--orange);opacity:0.85;';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--table-border);${includedStyle}">
+        <div style="width:30px;height:30px;border-radius:50%;background:var(--glass);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">${getCatEmoji(t.category)}</div>
+        <div style="width:72px;flex-shrink:0;font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums;">${dateStr}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.description)}</div>
+          <div style="font-size:10px;color:var(--orange);margin-top:1px;">⚠ Ya existe en el hub</div>
+        </div>
+        <div style="flex-shrink:0;">${displayAmt}</div>
+        <button onclick="toggleImportDupe(${realIdx})" style="flex-shrink:0;padding:4px 10px;border-radius:20px;border:1px solid ${t._incluir?'var(--green)':'var(--orange)'};background:transparent;color:${t._incluir?'var(--green)':'var(--orange)'};font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          ${t._incluir ? '✓ Incluir' : 'Incluir'}
+        </button>
+        <button onclick="removeImportTxn(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Quitar">✕</button>
+      </div>`;
+    }
+
+    // Normal row
+    const catSelect = `<select onchange="setImportTxnCat(${realIdx},this.value)" style="background:var(--glass);border:1px solid var(--glass-border);border-radius:6px;font-size:11px;color:var(--text-secondary);padding:3px 6px;outline:none;cursor:pointer;max-width:110px;">
+      <option value="">${t.category ? '' : '⚠ '} ${t.category || 'Sin categoría'}</option>
+      ${cats.map(c => `<option value="${esc(c)}" ${c===t.category?'selected':''}>${esc(c)}</option>`).join('')}
+    </select>`;
+
+    // Shared control
+    const sharedBtn = t.shared
+      ? `<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+           <button onclick="toggleImportShared(${realIdx})" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:12px;color:var(--blue);font-size:11px;font-weight:600;padding:2px 7px;cursor:pointer;">÷${t.sharedPeople}</button>
+           <select onchange="setImportSharedPeople(${realIdx},this.value)" style="background:var(--glass);border:1px solid var(--glass-border);border-radius:6px;font-size:11px;padding:2px 4px;outline:none;color:var(--text-secondary);">
+             ${[2,3,4,5,6,8,10].map(n=>`<option value="${n}" ${n===t.sharedPeople?'selected':''}>${n} pers.</option>`).join('')}
+           </select>
+         </div>`
+      : `<button onclick="toggleImportShared(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:12px;padding:2px 5px;flex-shrink:0;border-radius:4px;opacity:0.5;" title="Gasto compartido">÷</button>`;
+
+    const rowBg = !t.category ? 'background:var(--purple-glow);' : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--table-border);${rowBg}">
       <div style="width:30px;height:30px;border-radius:50%;background:var(--glass);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">${getCatEmoji(t.category)}</div>
-      <div style="width:72px;flex-shrink:0;font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums;">${dateStr}</div>
+      <div style="width:64px;flex-shrink:0;font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums;">${dateStr}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.description)}</div>
         <div style="font-size:10px;color:var(--text-tertiary);margin-top:1px;">${t.bank||''} ${t.tcId?'· TC':t.source==='cuenta'?'· Débito':''}</div>
       </div>
       <div style="flex-shrink:0;">${catSelect}</div>
-      <div style="font-size:13px;font-weight:600;color:${amtCol};white-space:nowrap;min-width:80px;text-align:right;">${amtSign}${t.currency==='USD'?'U$D ':'$'}${fmtN(t.amount)}</div>
-      ${isDupeView?'':
-        `<button onclick="editImportTxn(${realIdx})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Editar">✎</button>
-         <button onclick="removeImportTxn(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Quitar">✕</button>`}
+      <div style="flex-shrink:0;">${displayAmt}</div>
+      ${sharedBtn}
+      <button onclick="editImportTxn(${realIdx})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Editar">✎</button>
+      <button onclick="removeImportTxn(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Quitar">✕</button>
     </div>`;
   }).join('');
 }
@@ -3386,7 +3447,40 @@ function setImportTxnCat(idx, cat) {
 
 function removeImportTxn(idx) {
   _importPending.splice(idx, 1);
-  document.getElementById('import-confirm-label').textContent = 'Confirmar ' + _importPending.length + ' movimientos';
+  updateImportConfirmLabel();
+  renderImportList();
+}
+
+function toggleImportDupe(idx) {
+  const t = _importPending[idx];
+  if (!t || !t.isDupe) return;
+  t._incluir = !t._incluir;
+  updateImportConfirmLabel();
+  renderImportList();
+}
+
+function toggleImportShared(idx) {
+  const t = _importPending[idx];
+  if (!t) return;
+  if (t.shared) {
+    t.amount = t._originalAmount || t.amount;
+    t._originalAmount = null;
+    t.shared = false;
+    t.sharedPeople = null;
+  } else {
+    t._originalAmount = t.amount;
+    t.sharedPeople = 2;
+    t.shared = true;
+    t.amount = Math.round(t._originalAmount / 2 * 100) / 100;
+  }
+  renderImportList();
+}
+
+function setImportSharedPeople(idx, n) {
+  const t = _importPending[idx];
+  if (!t || !t.shared) return;
+  t.sharedPeople = parseInt(n) || 2;
+  t.amount = Math.round(t._originalAmount / t.sharedPeople * 100) / 100;
   renderImportList();
 }
 
@@ -3419,7 +3513,8 @@ function editImportTxn(idx) {
   document.getElementById('txn-cuota-total').value = txn.cuotaTotal || '';
   catSel.value = txn.category || state.categories[0];
   const sharedCb = document.getElementById('txn-shared');
-  sharedCb.checked = false;
+  sharedCb.checked = !!txn.shared;
+  document.getElementById('txn-shared-people').value = txn.sharedPeople || 2;
   toggleSharedExpense();
   openModal('modal-txn');
 }
@@ -3428,10 +3523,23 @@ function confirmImport() {
   const btn = document.getElementById('import-confirm-btn');
   btn.disabled = true;
   btn.innerHTML = '<span style="opacity:.6">Guardando…</span>';
-  _importPending.forEach(t => state.transactions.push(t));
+  // Only import non-dupes OR dupes the user explicitly included
+  const toImport = _importPending.filter(t => !t.isDupe || t._incluir);
+  toImport.forEach(t => {
+    // Apply shared split to description if needed
+    if (t.shared && t.sharedPeople > 1) {
+      t.description = (t.description||'') + ' (÷' + t.sharedPeople + ')';
+      t.originalAmount = t._originalAmount;
+      t.sharedPeople = t.sharedPeople;
+    }
+    // Clean internal import flags
+    delete t._originalAmount; delete t.isDupe; delete t._incluir;
+    state.transactions.push(t);
+  });
+  const skipped = _importPending.filter(t => t.isDupe && !t._incluir).length;
   saveState(); showDashContent(); renderDashboard(); updateSidebarBalance();
   closeModal('modal-import');
-  showToast(_importPending.length + ' movimientos importados ✓');
+  showToast(toImport.length + ' importados' + (skipped ? ' · ' + skipped + ' duplicados omitidos' : '') + ' ✓');
   _importPending = []; _importDupes = [];
   btn.disabled = false;
   btn.innerHTML = '<span id="import-confirm-label">Confirmar importación</span>';
@@ -3694,6 +3802,62 @@ function routeFiles(files) {
 }
 
 // Shared dedup check (returns {newTxns, dupes})
+// ═══════════════════════════════════════════════
+//  DUPLICATE CLEANUP (existing transactions)
+// ═══════════════════════════════════════════════
+function openDupeCleanup() {
+  const groups = findExistingDupes();
+  const sub = document.getElementById('dupe-cleanup-sub');
+  const list = document.getElementById('dupe-cleanup-list');
+
+  if (!groups.length) {
+    sub.textContent = '✓ No se encontraron duplicados en tus movimientos';
+    list.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-caption);font-size:13px;">Tu historial está limpio 👌</div>';
+  } else {
+    sub.textContent = groups.length + ' grupo' + (groups.length !== 1 ? 's' : '') + ' de movimientos duplicados encontrados';
+    list.innerHTML = groups.map(group => {
+      return `<div style="margin-bottom:16px;border:1px solid var(--orange);border-radius:10px;overflow:hidden;">
+        <div style="background:rgba(251,146,60,0.08);padding:8px 14px;font-size:11px;font-weight:700;color:var(--orange);letter-spacing:.5px;text-transform:uppercase;">
+          ⚠ ${group.length} movimientos idénticos
+        </div>
+        ${group.map((t, i) => {
+          const d = t.date instanceof Date ? t.date : new Date(t.date);
+          const dateStr = d.getDate()+'/'+(d.getMonth()+1)+'/'+String(d.getFullYear()).slice(2);
+          const isGasto = t.status === 'PAGADO';
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--border);background:${i===0?'transparent':'rgba(251,146,60,0.04)'}">
+            <div style="flex-shrink:0;font-size:11px;color:var(--text-tertiary);width:60px;">${dateStr}</div>
+            <div style="flex:1;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.description)}</div>
+            <div style="font-size:12px;color:${isGasto?'var(--red)':'var(--green)'};font-weight:600;white-space:nowrap;">${isGasto?'-':'+'}$${fmtN(t.amount)}</div>
+            <div style="font-size:11px;color:var(--text-tertiary);width:70px;text-align:right;">${t.bank||''}</div>
+            ${i > 0 ? `<button onclick="deleteDupeTxn('${t.id}')" style="flex-shrink:0;padding:3px 10px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:11px;font-weight:600;cursor:pointer;">Eliminar</button>` :
+              `<div style="flex-shrink:0;width:68px;font-size:10px;color:var(--text-caption);text-align:center;">conservar</div>`}
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+  }
+  openModal('modal-dupe-cleanup');
+}
+
+function findExistingDupes() {
+  const seen = {};
+  const groups = {};
+  state.transactions.forEach(t => {
+    const ds = t.date instanceof Date ? t.date.toISOString().split('T')[0] : String(t.date).split('T')[0];
+    const key = ds + '|' + (t.description||'').toLowerCase().trim() + '|' + t.amount;
+    if (!seen[key]) { seen[key] = []; }
+    seen[key].push(t);
+  });
+  return Object.values(seen).filter(g => g.length > 1);
+}
+
+function deleteDupeTxn(id) {
+  state.transactions = state.transactions.filter(t => t.id !== id);
+  saveState();
+  openDupeCleanup(); // re-render with updated data
+  showToast('Movimiento eliminado');
+}
+
 function deduplicateParsed(txns) {
   const newTxns = [], dupes = [];
   txns.forEach(t => {
