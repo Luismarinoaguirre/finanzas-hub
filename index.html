@@ -1968,7 +1968,10 @@ tr:hover td { background: var(--table-hover); }
     <div class="glass-card" style="padding:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <div class="chart-card-title">Detalle de movimientos</div>
-        <button class="btn btn-glass" onclick="exportReport()" style="font-size:12px;padding:6px 14px;">↓ Exportar CSV</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-glass" onclick="exportReport()" style="font-size:12px;padding:6px 14px;">↓ CSV</button>
+          <button class="btn btn-primary" onclick="exportReportPDF()" style="font-size:12px;padding:6px 14px;">📄 Exportar PDF</button>
+        </div>
       </div>
       <div id="report-table" style="max-height:500px;overflow-y:auto;"></div>
     </div>
@@ -5255,7 +5258,10 @@ function renderTxnPage(txns) {
       <td><span class="badge" style="background:${catColor(t.category||'Otros')}22;color:${catColor(t.category||'Otros')};border:1px solid ${catColor(t.category||'Otros')}33;">${esc(t.category||'Otros')}</span></td>
       <td style="font-size:12px;">${tc?`<span style="color:${tc.color||'var(--blue-light)'};font-weight:600;">💳 ${esc(tc.name)}</span>`:esc(t.bank||'—')}</td>
       <td><span class="badge status-${statusCls}">${esc(status)}</span></td>
-      <td class="td-amount ${amtCls}">${['A COBRAR','COBRADO'].includes(status)?'+':''}${fmtM(t.amount,t.currency)}</td>
+      <td class="td-amount ${amtCls}" style="line-height:1.2;">
+        ${['A COBRAR','COBRADO'].includes(status)?'+':''}${fmtM(t.amount,t.currency)}
+        ${t.shared && t.sharedPeople > 1 ? `<div style="font-size:10px;color:var(--text-tertiary);font-weight:400;margin-top:1px;">de ${fmtM(Math.round(t.amount*t.sharedPeople),t.currency)} ÷${t.sharedPeople}</div>` : ''}
+      </td>
       <td style="text-align:center;font-size:12px;color:var(--text-tertiary);">${cuotaStr}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-glass btn-icon btn-sm" onclick="openNewTxn('${t.id}')" title="Editar">✎</button>
@@ -6155,6 +6161,160 @@ function exportReport() {
   a.href = URL.createObjectURL(blob);
   a.download = 'reporte_' + document.getElementById('report-from').value + '_' + document.getElementById('report-to').value + '.csv';
   a.click();
+}
+
+function exportReportPDF() {
+  if (!_reportTxns.length) { showToast('No hay datos para exportar', 'error'); return; }
+
+  const from = document.getElementById('report-from').value;
+  const to = document.getElementById('report-to').value;
+  const total = _reportTxns.reduce((s,t) => s + t.amount, 0);
+  const gastos = _reportTxns.filter(t => !['COBRADO','A COBRAR'].includes(t.status||'')).reduce((s,t)=>s+t.amount,0);
+  const ingresos = _reportTxns.filter(t => ['COBRADO','A COBRAR'].includes(t.status||'')).reduce((s,t)=>s+t.amount,0);
+  const avg = _reportTxns.length ? total / _reportTxns.length : 0;
+  const shared = _reportTxns.filter(t => t.shared);
+
+  // Category breakdown
+  const byCat = {};
+  _reportTxns.forEach(t => { const c = t.category||'Otros'; byCat[c] = (byCat[c]||0) + t.amount; });
+  const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+  const txnRows = _reportTxns.map(t => {
+    const d = t.date instanceof Date ? t.date : new Date(t.date);
+    const ds = d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    const isIn = ['COBRADO','A COBRAR'].includes(t.status||'');
+    const sharedNote = t.shared && t.sharedPeople > 1 ? ` <span style="font-size:9px;background:#EFF6FF;color:#3B82F6;padding:1px 5px;border-radius:4px;font-weight:600;">÷${t.sharedPeople}</span>` : '';
+    const origNote = t.shared && t.sharedPeople > 1 ? `<br><span style="font-size:9px;color:#94a3b8;">total: $${fmtN(Math.round(t.amount*t.sharedPeople))}</span>` : '';
+    return `<tr>
+      <td>${ds}</td>
+      <td>${esc(t.description)}${sharedNote}</td>
+      <td><span class="cat-pill">${esc(t.category||'Otros')}</span></td>
+      <td>${esc(t.bank||'—')}</td>
+      <td style="text-align:right;font-weight:600;color:${isIn?'#16a34a':'#dc2626'};">${isIn?'+':'-'}$${fmtN(t.amount)}${origNote}</td>
+    </tr>`;
+  }).join('');
+
+  const now = new Date();
+  const generatedAt = now.toLocaleDateString('es-AR',{day:'2-digit',month:'long',year:'numeric'}) + ' · ' + now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Reporte Finanzas Hub</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'SF Pro Display', 'Inter', sans-serif; font-size: 12px; color: #0f172a; background: #fff; padding: 32px 40px; }
+  /* Header */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #3B82F6; padding-bottom: 16px; margin-bottom: 24px; }
+  .header-left h1 { font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
+  .header-left p { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .header-right { text-align: right; }
+  .header-right .period { font-size: 13px; font-weight: 700; color: #3B82F6; }
+  .header-right .generated { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+  /* KPIs */
+  .kpis { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 24px; }
+  .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; }
+  .kpi .label { font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; }
+  .kpi .value { font-size: 20px; font-weight: 800; margin-top: 4px; color: #0f172a; }
+  .kpi.gastos .value { color: #dc2626; }
+  .kpi.ingresos .value { color: #16a34a; }
+  .kpi.shared .value { color: #3B82F6; }
+  /* Categories */
+  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; margin-bottom: 10px; }
+  .cat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; margin-bottom: 24px; }
+  .cat-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #f8fafc; border-radius: 7px; }
+  .cat-bar-wrap { flex: 1; height: 4px; background: #e2e8f0; border-radius: 2px; }
+  .cat-bar { height: 4px; background: #3B82F6; border-radius: 2px; }
+  .cat-name { font-size: 11px; font-weight: 600; width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cat-amt { font-size: 11px; font-weight: 700; color: #0f172a; white-space: nowrap; min-width: 70px; text-align: right; }
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { background: #f1f5f9; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #64748b; padding: 8px 10px; text-align: left; }
+  th:last-child { text-align: right; }
+  td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbfc; }
+  .cat-pill { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #EFF6FF; color: #3B82F6; white-space: nowrap; }
+  /* Footer */
+  .footer { margin-top: 28px; border-top: 1px solid #e2e8f0; padding-top: 12px; display: flex; justify-content: space-between; color: #94a3b8; font-size: 10px; }
+  @media print {
+    body { padding: 20px 28px; }
+    button { display: none !important; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <h1>💰 Finanzas Hub</h1>
+    <p>Reporte de movimientos</p>
+  </div>
+  <div class="header-right">
+    <div class="period">${from.split('-').reverse().join('/')} → ${to.split('-').reverse().join('/')}</div>
+    <div class="generated">Generado el ${generatedAt}</div>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi gastos">
+    <div class="label">Total gastos</div>
+    <div class="value">$${fmtN(gastos)}</div>
+  </div>
+  <div class="kpi ingresos">
+    <div class="label">Total ingresos</div>
+    <div class="value">${ingresos > 0 ? '$'+fmtN(ingresos) : '—'}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Movimientos</div>
+    <div class="value">${_reportTxns.length}</div>
+  </div>
+  <div class="kpi shared">
+    <div class="label">÷ Compartidos</div>
+    <div class="value">${shared.length}</div>
+  </div>
+</div>
+
+<div class="section-title">Distribución por categoría</div>
+<div class="cat-grid">
+${catRows.map(([cat,amt]) => {
+  const pct = Math.round((amt/Math.max(gastos,1))*100);
+  return `<div class="cat-row">
+    <span class="cat-name">${esc(cat)}</span>
+    <div class="cat-bar-wrap"><div class="cat-bar" style="width:${Math.min(pct,100)}%;"></div></div>
+    <span class="cat-amt">$${fmtN(amt)}</span>
+  </div>`;
+}).join('')}
+</div>
+
+<div class="section-title" style="margin-bottom:10px;">Detalle de movimientos (${_reportTxns.length})</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:68px;">Fecha</th>
+      <th>Descripción</th>
+      <th style="width:90px;">Categoría</th>
+      <th style="width:90px;">Banco</th>
+      <th style="width:100px;text-align:right;">Monto</th>
+    </tr>
+  </thead>
+  <tbody>${txnRows}</tbody>
+</table>
+
+<div class="footer">
+  <span>Finanzas Hub — reporte generado automáticamente</span>
+  <span>${_reportTxns.length} movimientos · promedio $${fmtN(avg)}</span>
+</div>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) { showToast('Permitir popups para exportar PDF', 'error'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { w.print(); }, 400);
 }
 
 // ═══════════════════════════════════════════════
