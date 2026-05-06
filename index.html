@@ -2467,6 +2467,37 @@ tr:hover td { background: var(--table-hover); }
   </div>
 </div>
 
+<!-- Monthly Income Confirmation -->
+<div class="modal-overlay" id="modal-income-confirm">
+  <div class="modal" style="width:440px;max-width:96vw;">
+    <div class="modal-title">💰 Ingresos de <span id="income-confirm-month-label"></span></div>
+    <div class="modal-sub" id="income-confirm-sub">Confirmá tus ingresos para este mes. Podés cambiarlos cuando quieras.</div>
+    <div class="modal-grid" style="margin-top:16px;">
+      <div class="input-group">
+        <div class="input-label">Sueldo ARS (fijo)</div>
+        <input type="number" class="input-field" id="income-ars-fixed" placeholder="0" min="0">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Ingresos ARS (variable)</div>
+        <input type="number" class="input-field" id="income-ars-var" placeholder="0" min="0">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Sueldo USD (fijo)</div>
+        <input type="number" class="input-field" id="income-usd-fixed" placeholder="0" min="0">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Ingresos USD (variable)</div>
+        <input type="number" class="input-field" id="income-usd-var" placeholder="0" min="0">
+      </div>
+    </div>
+    <div id="income-prev-ref" style="font-size:12px;color:var(--text-caption);margin-top:8px;padding:8px 0;border-top:1px solid var(--border);display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-glass" onclick="closeModal('modal-income-confirm')">Ahora no</button>
+      <button class="btn btn-primary" onclick="saveMonthIncome()">Confirmar ingresos</button>
+    </div>
+  </div>
+</div>
+
 <!-- New Credit Card -->
 <div class="modal-overlay" id="modal-tc">
   <div class="modal">
@@ -2780,10 +2811,13 @@ let state = {
   recurringExpenses: [],
   recurringGenerated: {},
   budgets: {},
+  monthlyIncome: {},
+  ignoredDupes: [],
 };
 
 let chartInvPie = null;
 let chartWeekly = null, chartCompare = null;
+let _incomePromptedThisSession = {}; // session-only guard: don't re-ask after dismiss
 let txnPage = 0;
 const TXN_PAGE_SIZE = 50;
 let editingTxnId = null;
@@ -2974,6 +3008,10 @@ function loadState() {
   state.recurringGenerated = state.recurringGenerated || {};
   state.budgets = state.budgets || {};
   state.inversiones = state.inversiones || [];
+  state.monthlyIncome = state.monthlyIncome || {};
+  state.ignoredDupes = state.ignoredDupes || [];
+  // Normalize all categories to match canonical list (fixes ALL-CAPS from old imports)
+  runCatNormalization();
 }
 
 // ═══════════════════════════════════════════════
@@ -3814,23 +3852,29 @@ function openDupeCleanup() {
     sub.textContent = '✓ No se encontraron duplicados en tus movimientos';
     list.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-caption);font-size:13px;">Tu historial está limpio 👌</div>';
   } else {
-    sub.textContent = groups.length + ' grupo' + (groups.length !== 1 ? 's' : '') + ' de movimientos duplicados encontrados';
+    const ignoredCount = (state.ignoredDupes || []).length;
+    sub.textContent = groups.length + ' grupo' + (groups.length !== 1 ? 's' : '') + ' de movimientos duplicados' + (ignoredCount ? ' · ' + ignoredCount + ' ignorados' : '');
     list.innerHTML = groups.map(group => {
+      const groupKey = getDupeKey(group[0]);
+      const keyEsc = groupKey.replace(/'/g,"\\'");
       return `<div style="margin-bottom:16px;border:1px solid var(--orange);border-radius:10px;overflow:hidden;">
-        <div style="background:rgba(251,146,60,0.08);padding:8px 14px;font-size:11px;font-weight:700;color:var(--orange);letter-spacing:.5px;text-transform:uppercase;">
-          ⚠ ${group.length} movimientos idénticos
+        <div style="background:rgba(251,146,60,0.08);padding:8px 14px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;font-weight:700;color:var(--orange);letter-spacing:.5px;text-transform:uppercase;flex:1;">⚠ ${group.length} movimientos idénticos</span>
+          <button onclick="ignoreDupeGroup('${keyEsc}')" style="font-size:10px;padding:2px 9px;border-radius:20px;border:1px solid var(--orange);background:transparent;color:var(--orange);cursor:pointer;white-space:nowrap;">Ignorar siempre</button>
         </div>
         ${group.map((t, i) => {
           const d = t.date instanceof Date ? t.date : new Date(t.date);
           const dateStr = d.getDate()+'/'+(d.getMonth()+1)+'/'+String(d.getFullYear()).slice(2);
           const isGasto = t.status === 'PAGADO';
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--border);background:${i===0?'transparent':'rgba(251,146,60,0.04)'}">
-            <div style="flex-shrink:0;font-size:11px;color:var(--text-tertiary);width:60px;">${dateStr}</div>
+          return `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border);background:${i===0?'transparent':'rgba(251,146,60,0.04)'}">
+            <div style="flex-shrink:0;font-size:11px;color:var(--text-tertiary);width:56px;">${dateStr}</div>
             <div style="flex:1;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.description)}</div>
-            <div style="font-size:12px;color:${isGasto?'var(--red)':'var(--green)'};font-weight:600;white-space:nowrap;">${isGasto?'-':'+'}$${fmtN(t.amount)}</div>
-            <div style="font-size:11px;color:var(--text-tertiary);width:70px;text-align:right;">${t.bank||''}</div>
-            ${i > 0 ? `<button onclick="deleteDupeTxn('${t.id}')" style="flex-shrink:0;padding:3px 10px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:11px;font-weight:600;cursor:pointer;">Eliminar</button>` :
-              `<div style="flex-shrink:0;width:68px;font-size:10px;color:var(--text-caption);text-align:center;">conservar</div>`}
+            <div style="font-size:12px;color:${isGasto?'var(--red)':'var(--green)'};font-weight:600;white-space:nowrap;flex-shrink:0;">${isGasto?'-':'+'}$${fmtN(t.amount)}</div>
+            <div style="font-size:11px;color:var(--text-tertiary);width:60px;text-align:right;flex-shrink:0;">${t.bank||''}</div>
+            <button onclick="editDupeTxn('${t.id}')" style="flex-shrink:0;padding:3px 9px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:11px;cursor:pointer;">✎ Editar</button>
+            ${i > 0
+              ? `<button onclick="deleteDupeTxn('${t.id}')" style="flex-shrink:0;padding:3px 9px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:11px;font-weight:600;cursor:pointer;">Eliminar</button>`
+              : `<div style="flex-shrink:0;width:62px;font-size:10px;color:var(--text-caption);text-align:center;">conservar</div>`}
           </div>`;
         }).join('')}
       </div>`;
@@ -3839,13 +3883,18 @@ function openDupeCleanup() {
   openModal('modal-dupe-cleanup');
 }
 
+function getDupeKey(t) {
+  const ds = t.date instanceof Date ? t.date.toISOString().split('T')[0] : String(t.date).split('T')[0];
+  return ds + '|' + (t.description||'').toLowerCase().trim() + '|' + t.amount;
+}
+
 function findExistingDupes() {
+  const ignored = new Set(state.ignoredDupes || []);
   const seen = {};
-  const groups = {};
   state.transactions.forEach(t => {
-    const ds = t.date instanceof Date ? t.date.toISOString().split('T')[0] : String(t.date).split('T')[0];
-    const key = ds + '|' + (t.description||'').toLowerCase().trim() + '|' + t.amount;
-    if (!seen[key]) { seen[key] = []; }
+    const key = getDupeKey(t);
+    if (ignored.has(key)) return;
+    if (!seen[key]) seen[key] = [];
     seen[key].push(t);
   });
   return Object.values(seen).filter(g => g.length > 1);
@@ -3854,8 +3903,21 @@ function findExistingDupes() {
 function deleteDupeTxn(id) {
   state.transactions = state.transactions.filter(t => t.id !== id);
   saveState();
-  openDupeCleanup(); // re-render with updated data
+  openDupeCleanup();
   showToast('Movimiento eliminado');
+}
+
+function ignoreDupeGroup(key) {
+  if (!state.ignoredDupes) state.ignoredDupes = [];
+  if (!state.ignoredDupes.includes(key)) state.ignoredDupes.push(key);
+  saveState();
+  openDupeCleanup();
+  showToast('Grupo ignorado', 'success');
+}
+
+function editDupeTxn(id) {
+  closeModal('modal-dupe-cleanup');
+  openNewTxn(id);
 }
 
 function deduplicateParsed(txns) {
@@ -4354,35 +4416,26 @@ function parseBrubankVisaPDF(lines) {
 }
 
 // ── Shared helpers ─────────────────────────────
-function normalizeCat(s) {
-  if (!s) return '';
-  s = s.trim();
-  if (/^\$[\d.,]+$/.test(s)) return '';
-  const MAP = {'GASTRONOMIA':'Gastronomia','TRANSFERENCIA':'Transferencia','COMPRAS':'Compras','CUENTAS':'Cuentas','PERSONAL':'Personal','COMISION':'Comision','KIOSCO':'Kiosco','TRANSPORTE':'Transporte','PRESTAMO':'Prestamo','LABURO':'Laburo','ROPA':'Ropa','REGALO':'Regalo','DEPORTE':'Deporte','ESTUDIOS':'Estudios','SALUD':'Salud','VIAJES':'Viajes','TECNOLOGIA':'Tecnologia','SUSCRIPCIONES':'Suscripciones','ENTRETENIMIENTO':'Entretenimiento'};
-  const found = MAP[s.toUpperCase()];
-  if (found) return found;
-  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-}
-
 function auto_cat(desc) {
   // 1. Try learned categories from user history first
   const learned = learnedCat(desc);
-  if (learned) return learned;
+  if (learned) return normalizeCat(learned);
   // 2. Fallback to regex rules
   const d = (desc||'').toUpperCase();
-  if (/UBER|DIDI|DLO\*DIDI|CABIFY|TAXI|PEAJE|SUBTE|SUBE\b|FLYBONDI|AEROLIN|WIZZ AIR/.test(d)) return 'Transporte';
-  if (/PEDIDOSYA|RAPPI|MCDONALDS|BURGER|PIZZA|SUSHI|\bBAR\b|CAFETER|STARBUCKS|KFC|SUBWAY|POLLO ISIDRO|ELPOLLOISIDRO|USINA CAFETERA|MERPAGO\*SABORES|MERPAGO\*365|\b365\b|MERPAGO\*QR|TROPICO|PASEO POR EL HUERTO|WIDIT DRINKS|MERPAGO\*LAJUVENILPAST|\bBEA\b|MARKET SAN ISIDRO|SUPERSOL|MERPAGO\*MAX|NEW FREDYS|FREDYS/.test(d)) return 'Gastronomía';
-  if (/SUPERMERCADO|CARREFOUR|\bCOTO\b|DISCO\b|JUMBO|WALMART|VEA\b|MERPAGO\*COTO/.test(d)) return 'Compras';
-  if (/NETFLIX|SPOTIFY|AMAZON|HBO|DISNEY|YOUTUBE|OPENAI|CHATGPT|ADOBE|FRAMER|ICLOUD|CLUBTICKETS/.test(d)) return 'Suscripciones';
-  if (/FARMACIA|MEDICO|CLINICA|HOSPITAL|LABORATORIO|OPTICA|SWISS MEDICAL|PAX ASSISTANCE/.test(d)) return 'Salud';
-  if (/\bZARA\b|H&M|ADIDAS|NIKE|INDUMENTARIA/.test(d)) return 'Ropa';
-  if (/IMPUESTO|IVA\b|IIBB|DB\.RG|DB IVA|SELLOS|PERCEP|INGRESOS BRUTOS/.test(d)) return 'Comisión';
-  if (/INTERESES|FINANCIACION|PUNIT|CARGO POR GESTION|PAGO DEL PLAN|SU PAGO EN PESOS/.test(d)) return 'Préstamo';
-  if (/AIRBNB|BOOKING|DESPEGAR|\bHOTEL\b|VUELO/.test(d)) return 'Viajes';
-  if (/GYM|SPORTCLUB|MEGATLON|PILATES|YOGA/.test(d)) return 'Deporte';
-  if (/GALICIA VISA|VISA BRUBANK|GALICIA AMEX|MERCADOPAGO\b|MERPAGO\*MERCADOPAGO|PAGO DE TARJETA|CLARO PAY|A UNA CUENTA TUYA/.test(d)) return 'Transferencia';
-  if (/HASLIBERG|HAPPY PEOPLE|PROVEEDOR|MANSO|MODULAR|GLOBAL FLOW/.test(d)) return 'Laburo';
-  return '';
+  let result = '';
+  if (/UBER|DIDI|DLO\*DIDI|CABIFY|TAXI|PEAJE|SUBTE|SUBE\b|FLYBONDI|AEROLIN|WIZZ AIR/.test(d)) result = 'Transporte';
+  else if (/PEDIDOSYA|RAPPI|MCDONALDS|BURGER|PIZZA|SUSHI|\bBAR\b|CAFETER|STARBUCKS|KFC|SUBWAY|POLLO ISIDRO|ELPOLLOISIDRO|USINA CAFETERA|MERPAGO\*SABORES|MERPAGO\*365|\b365\b|MERPAGO\*QR|TROPICO|PASEO POR EL HUERTO|WIDIT DRINKS|MERPAGO\*LAJUVENILPAST|\bBEA\b|MARKET SAN ISIDRO|SUPERSOL|MERPAGO\*MAX|NEW FREDYS|FREDYS/.test(d)) result = 'Gastronomía';
+  else if (/SUPERMERCADO|CARREFOUR|\bCOTO\b|DISCO\b|JUMBO|WALMART|VEA\b|MERPAGO\*COTO/.test(d)) result = 'Compras';
+  else if (/NETFLIX|SPOTIFY|AMAZON|HBO|DISNEY|YOUTUBE|OPENAI|CHATGPT|ADOBE|FRAMER|ICLOUD|CLUBTICKETS/.test(d)) result = 'Suscripciones';
+  else if (/FARMACIA|MEDICO|CLINICA|HOSPITAL|LABORATORIO|OPTICA|SWISS MEDICAL|PAX ASSISTANCE/.test(d)) result = 'Salud';
+  else if (/\bZARA\b|H&M|ADIDAS|NIKE|INDUMENTARIA/.test(d)) result = 'Ropa';
+  else if (/IMPUESTO|IVA\b|IIBB|DB\.RG|DB IVA|SELLOS|PERCEP|INGRESOS BRUTOS/.test(d)) result = 'Comisión';
+  else if (/INTERESES|FINANCIACION|PUNIT|CARGO POR GESTION|PAGO DEL PLAN|SU PAGO EN PESOS/.test(d)) result = 'Préstamo';
+  else if (/AIRBNB|BOOKING|DESPEGAR|\bHOTEL\b|VUELO/.test(d)) result = 'Viajes';
+  else if (/GYM|SPORTCLUB|MEGATLON|PILATES|YOGA/.test(d)) result = 'Deporte';
+  else if (/GALICIA VISA|VISA BRUBANK|GALICIA AMEX|MERCADOPAGO\b|MERPAGO\*MERCADOPAGO|PAGO DE TARJETA|CLARO PAY|A UNA CUENTA TUYA/.test(d)) result = 'Transferencia';
+  else if (/HASLIBERG|HAPPY PEOPLE|PROVEEDOR|MANSO|MODULAR|GLOBAL FLOW/.test(d)) result = 'Laburo';
+  return result ? normalizeCat(result) : '';
 }
 
 // Learn categories from user's past categorizations
@@ -4410,6 +4463,76 @@ function learnedCat(desc) {
   // Return the most common category
   const best = Object.entries(matches).sort((a,b)=>b[1]-a[1])[0];
   return best[0];
+}
+
+// ═══════════════════════════════════════════════
+//  CATEGORY NORMALIZATION
+// ═══════════════════════════════════════════════
+function stripAccents(s) {
+  return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+}
+
+// Given any raw category string, find the closest canonical match in state.categories
+function normalizeCat(raw) {
+  if (!raw) return raw;
+  const s = String(raw).trim();
+  // Junk patterns: looks like an amount or pure number
+  if (/^\$[\d.,]+$/.test(s) || /^\d+$/.test(s)) return '';
+  const cats = (state && state.categories && state.categories.length) ? state.categories : DEFAULT_CATS;
+  const rawN = stripAccents(s);
+  if (!rawN) return s;
+  // Exact (accent-insensitive)
+  const exact = cats.find(c => stripAccents(c) === rawN);
+  if (exact) return exact;
+  // Prefix match (rawN is beginning of canonical, or vice versa)
+  const prefix = cats.find(c => {
+    const cn = stripAccents(c);
+    return cn.startsWith(rawN) || rawN.startsWith(cn);
+  });
+  if (prefix) return prefix;
+  // Capitalize first letter for display if no match found
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Remove duplicate/variant categories from state.categories, remapping transactions
+function deduplicateConfigCats() {
+  if (!state.categories || !state.categories.length) return;
+  const seen = {};
+  const newCats = [];
+  const remap = {}; // oldCat → canonicalCat
+  state.categories.forEach(c => {
+    const key = stripAccents(c);
+    if (!seen[key]) {
+      seen[key] = c;
+      newCats.push(c);
+    } else {
+      // Prefer the one with accents/proper casing (longer or with special chars)
+      const existing = seen[key];
+      const winner = c.length > existing.length ? c : existing;
+      seen[key] = winner;
+      // remap both to winner
+      remap[c] = winner;
+      remap[existing] = winner;
+      const idx = newCats.indexOf(existing);
+      if (idx >= 0) newCats[idx] = winner;
+    }
+  });
+  if (Object.keys(remap).length) {
+    state.categories = newCats;
+    state.transactions.forEach(t => {
+      if (t.category && remap[t.category]) t.category = remap[t.category];
+    });
+  }
+}
+
+// Normalize ALL existing transaction categories to match canonical list
+function runCatNormalization() {
+  deduplicateConfigCats();
+  state.transactions.forEach(t => {
+    if (!t.category) return;
+    const norm = normalizeCat(t.category);
+    if (norm !== t.category) t.category = norm;
+  });
 }
 
 function mergeTransactions(txns) {
@@ -4714,6 +4837,74 @@ function showDashContent() {
 }
 
 // ═══════════════════════════════════════════════
+//  MONTHLY INCOME
+// ═══════════════════════════════════════════════
+// Get income for a month key (YYYY-MM). Falls back to global state.income.
+function getMonthIncome(mk) {
+  const mi = (state.monthlyIncome || {})[mk];
+  if (mi) return mi;
+  return { ars: state.income.ars || 0, arsVar: state.income.arsVar || 0, usd: state.income.usd || 0, usdVar: state.income.usdVar || 0 };
+}
+
+// Get previous month's key relative to a month key
+function prevMonthKey(mk) {
+  const [y, m] = mk.split('-').map(Number);
+  if (m === 1) return (y - 1) + '-12';
+  return y + '-' + String(m - 1).padStart(2, '0');
+}
+
+// Check if income confirmation is needed for given month, show modal if so
+function checkIncomeConfirmation(mk) {
+  const today = new Date();
+  const isCurrentMonth = mk === (today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0'));
+  if (!isCurrentMonth) return; // only ask for current month
+  const alreadyConfirmed = !!(state.monthlyIncome || {})[mk];
+  if (alreadyConfirmed) return; // already saved for this month
+  if (_incomePromptedThisSession[mk]) return; // already showed modal this session
+  _incomePromptedThisSession[mk] = true;
+  // Pre-fill from previous month (or global income)
+  const prevMk = prevMonthKey(mk);
+  const prev = getMonthIncome(prevMk);
+  const cur = getMonthIncome(mk);
+  document.getElementById('income-ars-fixed').value = cur.ars || prev.ars || '';
+  document.getElementById('income-ars-var').value = cur.arsVar || prev.arsVar || '';
+  document.getElementById('income-usd-fixed').value = cur.usd || prev.usd || '';
+  document.getElementById('income-usd-var').value = cur.usdVar || prev.usdVar || '';
+  // Month label
+  const [pY, pM] = mk.split('-').map(Number);
+  document.getElementById('income-confirm-month-label').textContent = MNAMES[pM-1] + ' ' + pY;
+  // Previous reference
+  const prevRef = document.getElementById('income-prev-ref');
+  const prevTotal = (prev.ars||0) + (prev.arsVar||0);
+  if (prevTotal > 0) {
+    prevRef.style.display = 'block';
+    const [pvY, pvM] = prevMk.split('-').map(Number);
+    prevRef.textContent = '↩ Mes anterior (' + MNAMES[pvM-1] + '): $' + fmtN(prevTotal) + (prev.usd ? ' · U$D ' + fmtN((prev.usd||0) + (prev.usdVar||0)) : '');
+  } else {
+    prevRef.style.display = 'none';
+  }
+  // Delay slightly so dashboard renders first
+  setTimeout(() => openModal('modal-income-confirm'), 600);
+}
+
+// Save income for current month
+function saveMonthIncome() {
+  const mk = getActiveDashMonth();
+  const ars = parseFloat(document.getElementById('income-ars-fixed').value) || 0;
+  const arsVar = parseFloat(document.getElementById('income-ars-var').value) || 0;
+  const usd = parseFloat(document.getElementById('income-usd-fixed').value) || 0;
+  const usdVar = parseFloat(document.getElementById('income-usd-var').value) || 0;
+  if (!state.monthlyIncome) state.monthlyIncome = {};
+  state.monthlyIncome[mk] = { ars, arsVar, usd, usdVar };
+  // Also update global income to keep settings in sync
+  state.income = { ars, arsVar, usd, usdVar };
+  saveState();
+  closeModal('modal-income-confirm');
+  renderDashboard();
+  showToast('Ingresos de ' + mk + ' guardados', 'success');
+}
+
+// ═══════════════════════════════════════════════
 //  DASHBOARD
 // ═══════════════════════════════════════════════
 function setDashMonth(val) {
@@ -4737,10 +4928,13 @@ function renderDashboard() {
   const usdGastos = monthTxns.filter(t => t.currency==='USD').reduce((s,t)=>s+t.amount,0);
   const totalARS = arsGastos + (usdGastos * state.usdRate);
 
-  // Income
-  const incARS = state.income.ars + state.income.arsVar;
-  const incUSD = state.income.usd + state.income.usdVar;
+  // Income — per-month if set, else global fallback
+  const monthInc = getMonthIncome(mk);
+  const incARS = (monthInc.ars||0) + (monthInc.arsVar||0);
+  const incUSD = (monthInc.usd||0) + (monthInc.usdVar||0);
   const incTotal = incARS + (incUSD * state.usdRate);
+  // Ask for income confirmation once per current month (1st–10th)
+  checkIncomeConfirmation(mk);
   const pct = incTotal > 0 ? Math.round((totalARS/incTotal)*100) : null;
   const margen = incTotal > 0 ? Math.max(0, incTotal - totalARS) : null;
 
