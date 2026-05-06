@@ -3417,7 +3417,7 @@ function renderImportList() {
              ${[2,3,4,5,6,8,10].map(n=>`<option value="${n}" ${n===t.sharedPeople?'selected':''}>${n} pers.</option>`).join('')}
            </select>
          </div>`
-      : `<button onclick="toggleImportShared(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:12px;padding:2px 5px;flex-shrink:0;border-radius:4px;opacity:0.5;" title="Gasto compartido">÷</button>`;
+      : `<button onclick="toggleImportShared(${realIdx})" style="flex-shrink:0;padding:3px 9px;border-radius:20px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;" title="Gasto compartido">÷ Dividir</button>`;
 
     const rowBg = !t.category ? 'background:var(--purple-glow);' : '';
     return `<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--table-border);${rowBg}">
