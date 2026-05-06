@@ -1968,9 +1968,12 @@ tr:hover td { background: var(--table-hover); }
     <div class="glass-card" style="padding:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <div class="chart-card-title">Detalle de movimientos</div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="report-sel-label" style="font-size:12px;color:var(--text-tertiary);"></span>
+          <button class="btn btn-glass" onclick="toggleSelectAllReport()" id="btn-report-selall" style="font-size:12px;padding:6px 12px;">Deseleccionar todo</button>
+          <button class="btn btn-glass" onclick="openAddToReport()" style="font-size:12px;padding:6px 12px;">＋ Agregar</button>
           <button class="btn btn-glass" onclick="exportReport()" style="font-size:12px;padding:6px 14px;">↓ CSV</button>
-          <button class="btn btn-primary" onclick="exportReportPDF()" style="font-size:12px;padding:6px 14px;">📄 Exportar PDF</button>
+          <button class="btn btn-primary" onclick="exportReportPDF()" style="font-size:12px;padding:6px 14px;">📄 PDF</button>
         </div>
       </div>
       <div id="report-table" style="max-height:500px;overflow-y:auto;"></div>
@@ -2479,6 +2482,19 @@ tr:hover td { background: var(--table-hover); }
     <div id="dupe-cleanup-list" style="max-height:52vh;overflow-y:auto;margin:16px 0;"></div>
     <div class="modal-actions">
       <button class="btn btn-glass" onclick="closeModal('modal-dupe-cleanup')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add transaction to report -->
+<div class="modal-overlay" id="modal-add-to-report">
+  <div class="modal" style="width:620px;max-width:96vw;">
+    <div class="modal-title">＋ Agregar al reporte</div>
+    <div class="modal-sub">Buscá movimientos para incluir en el reporte actual</div>
+    <input type="text" class="input-field" id="add-report-search" placeholder="Buscar por descripción, categoría o banco…" oninput="renderAddToReportList()" style="margin:14px 0 10px;width:100%;">
+    <div id="add-report-list" style="max-height:48vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-glass" onclick="closeModal('modal-add-to-report')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -5996,6 +6012,7 @@ function renderFixed() {
 // ═══════════════════════════════════════════════
 let reportChartCat = null, reportChartTime = null;
 let _reportTxns = [];
+let _reportSelected = new Set(); // IDs de txns activas en el reporte
 
 function initReportFilters() {
   // Set default dates (current month)
@@ -6051,6 +6068,7 @@ function generateReport() {
   });
 
   _reportTxns = txns;
+  _reportSelected = new Set(txns.map(t => t.id));
 
   if (!txns.length) {
     showToast('No se encontraron movimientos con esos filtros', 'error');
@@ -6059,16 +6077,31 @@ function generateReport() {
   }
 
   document.getElementById('report-results').style.display = '';
+  updateReportKPIs();
+  renderReportCharts(txns);
+  renderReportTable();
+  showToast(txns.length + ' movimientos encontrados');
+}
 
-  // KPIs
-  const total = txns.reduce((s, t) => s + t.amount, 0);
-  const maxTxn = txns.reduce((max, t) => t.amount > max.amount ? t : max, txns[0]);
+function getActiveReportTxns() {
+  return _reportTxns.filter(t => _reportSelected.has(t.id));
+}
+
+function updateReportKPIs() {
+  const active = getActiveReportTxns();
+  const total = active.reduce((s, t) => s + t.amount, 0);
+  const maxTxn = active.length ? active.reduce((mx, t) => t.amount > mx.amount ? t : mx, active[0]) : null;
   document.getElementById('report-kpi-total').textContent = '$' + fmtN(total);
-  document.getElementById('report-kpi-count').textContent = txns.length;
-  document.getElementById('report-kpi-avg').textContent = '$' + fmtN(total / txns.length);
-  document.getElementById('report-kpi-max').textContent = '$' + fmtN(maxTxn.amount);
+  document.getElementById('report-kpi-count').textContent = active.length;
+  document.getElementById('report-kpi-avg').textContent = active.length ? '$' + fmtN(total / active.length) : '—';
+  document.getElementById('report-kpi-max').textContent = maxTxn ? '$' + fmtN(maxTxn.amount) : '—';
+  const lbl = document.getElementById('report-sel-label');
+  const btn = document.getElementById('btn-report-selall');
+  if (lbl) lbl.textContent = active.length + ' de ' + _reportTxns.length + ' seleccionados';
+  if (btn) btn.textContent = active.length === _reportTxns.length ? 'Deseleccionar todo' : 'Seleccionar todo';
+}
 
-  // Chart: by category
+function renderReportCharts(txns) {
   const byCat = {};
   txns.forEach(t => { byCat[t.category] = (byCat[t.category] || 0) + t.amount; });
   const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
@@ -6078,75 +6111,124 @@ function generateReport() {
   if (ctxCat) {
     reportChartCat = new Chart(ctxCat, {
       type: 'doughnut',
-      data: {
-        labels: catEntries.map(e => e[0]),
-        datasets: [{ data: catEntries.map(e => e[1]), backgroundColor: catEntries.map(e => catColor(e[0])), borderWidth: 0 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'right', labels: { color: '#999', padding: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: function(ctx) { return ctx.label + ': $' + fmtN(ctx.raw); } } } }
-      }
+      data: { labels: catEntries.map(e => e[0]), datasets: [{ data: catEntries.map(e => e[1]), backgroundColor: catEntries.map(e => catColor(e[0])), borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#999', padding: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ctx.label + ': $' + fmtN(ctx.raw) } } } }
     });
   }
 
-  // Chart: timeline
   const byMonth = {};
-  txns.forEach(t => {
-    const mk = getMonthKey(t.date);
-    byMonth[mk] = (byMonth[mk] || 0) + t.amount;
-  });
+  txns.forEach(t => { const mk = getMonthKey(t.date); byMonth[mk] = (byMonth[mk] || 0) + t.amount; });
   const timeLabels = Object.keys(byMonth).sort();
-  const timeData = timeLabels.map(k => byMonth[k]);
 
   if (reportChartTime) reportChartTime.destroy();
   const ctxTime = document.getElementById('report-chart-time');
   if (ctxTime) {
     reportChartTime = new Chart(ctxTime, {
       type: 'bar',
-      data: {
-        labels: timeLabels.map(function(l) { var p = l.split('-'); return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(p[1])-1] + ' ' + p[0].slice(2); }),
-        datasets: [{ data: timeData, backgroundColor: 'rgba(59,130,246,0.6)', borderRadius: 4 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return '$' + fmtN(ctx.raw); } } } },
-        scales: {
-          y: { ticks: { color: 'var(--text-secondary)', callback: function(v) { return '$' + fmtN(v); } }, grid: { color: 'var(--table-border)' } },
-          x: { ticks: { color: 'var(--text-secondary)' }, grid: { display: false } }
-        }
-      }
+      data: { labels: timeLabels.map(l => { const p = l.split('-'); return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(p[1])-1]+' '+p[0].slice(2); }), datasets: [{ data: timeLabels.map(k => byMonth[k]), backgroundColor: 'rgba(59,130,246,0.6)', borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + fmtN(ctx.raw) } } }, scales: { y: { ticks: { color: 'var(--text-secondary)', callback: v => '$' + fmtN(v) }, grid: { color: 'var(--table-border)' } }, x: { ticks: { color: 'var(--text-secondary)' }, grid: { display: false } } } }
     });
   }
+}
 
-  // Table
-  var sortedTxns = txns.sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
-  document.getElementById('report-table').innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+function renderReportTable() {
+  const sorted = [..._reportTxns].sort((a, b) => new Date(b.date) - new Date(a.date));
+  document.getElementById('report-table').innerHTML =
+    '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
     '<thead><tr style="border-bottom:1px solid var(--glass-border);">' +
+    '<th style="padding:8px 8px 8px 4px;width:32px;"></th>' +
     '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Fecha</th>' +
     '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Descripción</th>' +
     '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Categoría</th>' +
     '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Banco</th>' +
     '<th style="text-align:right;padding:8px 4px;color:var(--text-secondary);font-weight:500;">Monto</th>' +
     '</tr></thead><tbody>' +
-    sortedTxns.map(function(t) {
-      var d = t.date instanceof Date ? t.date : new Date(t.date);
-      return '<tr style="border-bottom:1px solid var(--table-border);">' +
-        '<td style="padding:8px 4px;white-space:nowrap;">' + d.toLocaleDateString('es-AR') + '</td>' +
-        '<td style="padding:8px 4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(t.description) + '</td>' +
-        '<td style="padding:8px 4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + catColor(t.category) + ';margin-right:6px;vertical-align:middle;"></span>' + esc(t.category) + '</td>' +
-        '<td style="padding:8px 4px;color:var(--text-secondary);">' + esc(t.bank || '—') + '</td>' +
-        '<td style="padding:8px 4px;text-align:right;font-weight:600;">' + fmtM(t.amount, t.currency) + '</td>' +
-      '</tr>';
+    sorted.map(t => {
+      const d = t.date instanceof Date ? t.date : new Date(t.date);
+      const checked = _reportSelected.has(t.id) ? 'checked' : '';
+      const rowStyle = _reportSelected.has(t.id) ? '' : 'opacity:0.35;';
+      const isIn = ['COBRADO','A COBRAR'].includes(t.status||'');
+      return `<tr style="border-bottom:1px solid var(--table-border);${rowStyle}" id="rrow-${t.id}">
+        <td style="padding:6px 4px;text-align:center;"><input type="checkbox" ${checked} onchange="toggleReportTxn('${t.id}')" style="width:14px;height:14px;cursor:pointer;accent-color:var(--blue);"></td>
+        <td style="padding:8px 4px;white-space:nowrap;font-size:12px;">${d.toLocaleDateString('es-AR')}</td>
+        <td style="padding:8px 4px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.description)}</td>
+        <td style="padding:8px 4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${catColor(t.category)};margin-right:5px;vertical-align:middle;"></span>${esc(t.category||'Otros')}</td>
+        <td style="padding:8px 4px;color:var(--text-secondary);font-size:12px;">${esc(t.bank||'—')}</td>
+        <td style="padding:8px 4px;text-align:right;font-weight:600;color:${isIn?'var(--green)':'inherit'};">${isIn?'+':''}${fmtM(t.amount,t.currency)}</td>
+      </tr>`;
     }).join('') +
     '</tbody></table>';
+}
 
-  showToast(txns.length + ' movimientos encontrados');
+function toggleReportTxn(id) {
+  if (_reportSelected.has(id)) _reportSelected.delete(id);
+  else _reportSelected.add(id);
+  const row = document.getElementById('rrow-' + id);
+  if (row) row.style.opacity = _reportSelected.has(id) ? '' : '0.35';
+  updateReportKPIs();
+}
+
+function toggleSelectAllReport() {
+  if (_reportSelected.size === _reportTxns.length) {
+    _reportSelected.clear();
+  } else {
+    _reportTxns.forEach(t => _reportSelected.add(t.id));
+  }
+  renderReportTable();
+  updateReportKPIs();
+}
+
+function openAddToReport() {
+  document.getElementById('add-report-search').value = '';
+  renderAddToReportList();
+  openModal('modal-add-to-report');
+}
+
+function renderAddToReportList() {
+  const q = (document.getElementById('add-report-search')?.value || '').toLowerCase().trim();
+  const inReport = new Set(_reportTxns.map(t => t.id));
+  let candidates = state.transactions.filter(t => !inReport.has(t.id));
+  if (q) candidates = candidates.filter(t =>
+    t.description.toLowerCase().includes(q) ||
+    (t.category||'').toLowerCase().includes(q) ||
+    (t.bank||'').toLowerCase().includes(q)
+  );
+  candidates = candidates.sort((a,b) => new Date(b.date)-new Date(a.date)).slice(0,80);
+  const el = document.getElementById('add-report-list');
+  if (!candidates.length) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-caption);font-size:13px;">No se encontraron movimientos</div>';
+    return;
+  }
+  el.innerHTML = candidates.map(t => {
+    const d = t.date instanceof Date ? t.date : new Date(t.date);
+    const ds = d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    const isIn = ['COBRADO','A COBRAR'].includes(t.status||'');
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);">
+      <div style="font-size:11px;color:var(--text-tertiary);width:56px;flex-shrink:0;">${ds}</div>
+      <div style="flex:1;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.description)}</div>
+      <div style="font-size:11px;color:var(--text-tertiary);flex-shrink:0;">${esc(t.category||'Otros')}</div>
+      <div style="font-size:12px;font-weight:600;flex-shrink:0;color:${isIn?'var(--green)':'var(--red)'};">${isIn?'+':'-'}$${fmtN(t.amount)}</div>
+      <button onclick="addTxnToReport('${t.id}')" style="flex-shrink:0;padding:3px 10px;border-radius:20px;border:1px solid var(--blue);background:transparent;color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;">＋ Agregar</button>
+    </div>`;
+  }).join('');
+}
+
+function addTxnToReport(id) {
+  const t = state.transactions.find(x => x.id === id);
+  if (!t) return;
+  _reportTxns.push(t);
+  _reportSelected.add(t.id);
+  renderReportTable();
+  updateReportKPIs();
+  renderAddToReportList(); // refresh candidates list
+  showToast('Movimiento agregado al reporte', 'success');
 }
 
 function exportReport() {
-  if (!_reportTxns.length) { showToast('No hay datos para exportar', 'error'); return; }
+  const active = getActiveReportTxns();
+  if (!active.length) { showToast('No hay movimientos seleccionados', 'error'); return; }
   var csv = 'Fecha,Descripcion,Monto,Moneda,Categoria,Banco,Estado\n';
-  _reportTxns.forEach(function(t) {
+  active.forEach(function(t) {
     var d = t.date instanceof Date ? t.date : new Date(t.date);
     csv += d.toISOString().split('T')[0] + ',' +
       '"' + (t.description || '').replace(/"/g, '""') + '",' +
@@ -6164,15 +6246,17 @@ function exportReport() {
 }
 
 function exportReportPDF() {
-  if (!_reportTxns.length) { showToast('No hay datos para exportar', 'error'); return; }
+  const active = getActiveReportTxns();
+  if (!active.length) { showToast('No hay movimientos seleccionados', 'error'); return; }
 
   const from = document.getElementById('report-from').value;
   const to = document.getElementById('report-to').value;
-  const total = _reportTxns.reduce((s,t) => s + t.amount, 0);
-  const gastos = _reportTxns.filter(t => !['COBRADO','A COBRAR'].includes(t.status||'')).reduce((s,t)=>s+t.amount,0);
-  const ingresos = _reportTxns.filter(t => ['COBRADO','A COBRAR'].includes(t.status||'')).reduce((s,t)=>s+t.amount,0);
-  const avg = _reportTxns.length ? total / _reportTxns.length : 0;
-  const shared = _reportTxns.filter(t => t.shared);
+  const _reportTxns = active; // alias for the template below
+  const total = active.reduce((s,t) => s + t.amount, 0);
+  const gastos = active.filter(t => !['COBRADO','A COBRAR'].includes(t.status||'')).reduce((s,t)=>s+t.amount,0);
+  const ingresos = active.filter(t => ['COBRADO','A COBRAR'].includes(t.status||'')).reduce((s,t)=>s+t.amount,0);
+  const avg = active.length ? total / active.length : 0;
+  const shared = active.filter(t => t.shared);
 
   // Category breakdown
   const byCat = {};
