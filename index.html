@@ -1589,6 +1589,11 @@ tr:hover td { background: var(--table-hover); }
         <option value="ARS">Solo ARS</option>
         <option value="USD">Solo USD</option>
       </select>
+      <select class="filter-select" id="filter-shared" onchange="renderTransactions()">
+        <option value="">Todos</option>
+        <option value="shared">÷ Compartidos</option>
+        <option value="individual">Sin compartir</option>
+      </select>
     </div>
   </div>
 
@@ -1913,6 +1918,14 @@ tr:hover td { background: var(--table-hover); }
       <div class="input-group">
         <div class="input-label">Buscar</div>
         <input type="text" class="input-field" id="report-search" placeholder="Descripción...">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Compartidos</div>
+        <select class="input-field" id="report-shared">
+          <option value="">Todos</option>
+          <option value="shared">÷ Solo compartidos</option>
+          <option value="individual">Sin compartir</option>
+        </select>
       </div>
     </div>
   </div>
@@ -5201,11 +5214,14 @@ function getFilteredTxns() {
   const cat = document.getElementById('filter-cat')?.value;
   const status = document.getElementById('filter-status')?.value;
   const currency = document.getElementById('filter-currency')?.value;
+  const shared = document.getElementById('filter-shared')?.value;
   if (search) txns = txns.filter(t => t.description.toLowerCase().includes(search) || (t.category||'').toLowerCase().includes(search));
   if (month) txns = txns.filter(t => getMonthKey(t.date)===month);
   if (cat) txns = txns.filter(t => t.category===cat);
   if (status) txns = txns.filter(t => (t.status||'PAGADO')===status);
   if (currency) txns = txns.filter(t => t.currency===currency);
+  if (shared === 'shared') txns = txns.filter(t => !!t.shared);
+  if (shared === 'individual') txns = txns.filter(t => !t.shared);
   return txns.sort((a,b) => new Date(b.date)-new Date(a.date));
 }
 
@@ -6006,6 +6022,7 @@ function generateReport() {
   const status = document.getElementById('report-status').value;
   const type = document.getElementById('report-type').value;
   const search = document.getElementById('report-search').value.toLowerCase().trim();
+  const shared = document.getElementById('report-shared')?.value;
 
   if (isNaN(from.getTime()) || isNaN(to.getTime())) {
     showToast('Seleccioná un período válido', 'error');
@@ -6022,6 +6039,8 @@ function generateReport() {
     if (type === 'gastos' && t.status === 'COBRADO') return false;
     if (type === 'ingresos' && t.status !== 'COBRADO') return false;
     if (search && !t.description.toLowerCase().includes(search)) return false;
+    if (shared === 'shared' && !t.shared) return false;
+    if (shared === 'individual' && !!t.shared) return false;
     return true;
   });
 
