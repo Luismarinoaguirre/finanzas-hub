@@ -1594,6 +1594,13 @@ tr:hover td { background: var(--table-hover); }
         <option value="shared">÷ Compartidos</option>
         <option value="individual">Sin compartir</option>
       </select>
+      <select class="filter-select" id="filter-reimbursement" onchange="renderTransactions()">
+        <option value="">Reembolsos: todos</option>
+        <option value="pending">🔴 Por cobrar</option>
+        <option value="partial">🟡 Cobrado parcial</option>
+        <option value="complete">✅ Cobrado</option>
+        <option value="is-reimbursement">🔗 Es reembolso</option>
+      </select>
     </div>
   </div>
 
@@ -1925,6 +1932,16 @@ tr:hover td { background: var(--table-hover); }
           <option value="">Todos</option>
           <option value="shared">÷ Solo compartidos</option>
           <option value="individual">Sin compartir</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Reembolso</div>
+        <select class="input-field" id="report-reimbursement">
+          <option value="">Todos</option>
+          <option value="pending">🔴 Por cobrar</option>
+          <option value="partial">🟡 Cobrado parcial</option>
+          <option value="complete">✅ Cobrado</option>
+          <option value="is-reimbursement">🔗 Es reembolso</option>
         </select>
       </div>
     </div>
@@ -2431,6 +2448,12 @@ tr:hover td { background: var(--table-hover); }
           <input type="number" class="input-field" id="txn-cuota-num" placeholder="Nro" min="1" style="flex:1;">
           <input type="number" class="input-field" id="txn-cuota-total" placeholder="Total" min="1" style="flex:1;">
         </div>
+      </div>
+      <div class="input-group modal-full" id="txn-reimbursement-group" style="display:none;">
+        <div class="input-label">¿Es reembolso de un gasto compartido?</div>
+        <select class="input-field" id="txn-reimbursement-for">
+          <option value="">— No es reembolso —</option>
+        </select>
       </div>
       <div class="input-group modal-full" id="txn-shared-group">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -3171,8 +3194,88 @@ function openNewTxn(id) {
   document.getElementById('txn-shared-people').value = txn ? (txn.sharedPeople || 2) : 2;
   toggleSharedExpense();
 
+  // Reimbursement section — show only for COBRADO/A COBRAR
+  populateReimbursementSelect(txn);
+  document.getElementById('txn-status').addEventListener('change', () => populateReimbursementSelect(null), { once: true });
+
   openModal('modal-txn');
   setTimeout(() => document.getElementById('txn-desc').focus(), 100);
+}
+
+// ═══════════════════════════════════════════════
+//  REIMBURSEMENT HELPERS
+// ═══════════════════════════════════════════════
+function getSharedOwed(t) {
+  // How much others owe Luis from a shared expense HE paid in full
+  if (!t.shared || !t.sharedPeople || t.sharedPeople < 2) return 0;
+  return Math.round(t.amount * (t.sharedPeople - 1));
+}
+
+function getSharedReceived(t) {
+  return state.transactions
+    .filter(r => r.reimbursementFor === t.id)
+    .reduce((s, r) => s + r.amount, 0);
+}
+
+function getSharedStatus(t) {
+  const owed = getSharedOwed(t);
+  if (owed <= 0) return null;
+  const received = getSharedReceived(t);
+  if (received <= 0) return 'pending';
+  if (received >= owed) return 'complete';
+  return 'partial';
+}
+
+// Populate the reimbursement dropdown in modal-txn
+function populateReimbursementSelect(txn) {
+  const status = document.getElementById('txn-status').value;
+  const group = document.getElementById('txn-reimbursement-group');
+  const sel = document.getElementById('txn-reimbursement-for');
+  const isIncoming = ['COBRADO','A COBRAR'].includes(status);
+  group.style.display = isIncoming ? '' : 'none';
+  if (!isIncoming) { sel.value = ''; return; }
+
+  // Shared expenses with pending/partial reimbursement
+  const candidates = state.transactions
+    .filter(t => t.shared && t.sharedPeople > 1 && getSharedStatus(t) !== 'complete')
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  sel.innerHTML = '<option value="">— No es reembolso —</option>' +
+    candidates.map(t => {
+      const d = t.date instanceof Date ? t.date : new Date(t.date);
+      const ds = d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+      const pending = getSharedOwed(t) - getSharedReceived(t);
+      return `<option value="${t.id}">${ds} · ${esc(t.description)} · $${fmtN(pending)} pendiente</option>`;
+    }).join('');
+
+  // Pre-select if editing existing reimbursement
+  if (txn && txn.reimbursementFor) sel.value = txn.reimbursementFor;
+}
+
+// Called from the transaction list "Vincular" button on COBRADO rows
+function openLinkReimbursement(cobradoId) {
+  openNewTxn(cobradoId);
+  // Status is already COBRADO, the select will auto-populate
+}
+
+// Auto-detect possible reimbursements for a COBRADO transaction
+function detectReimbursementMatch(t) {
+  if (!['COBRADO','A COBRAR'].includes(t.status||'')) return null;
+  if (t.reimbursementFor) return null;
+  const txnDate = t.date instanceof Date ? t.date : new Date(t.date);
+  const candidates = state.transactions.filter(s => {
+    if (!s.shared || s.sharedPeople < 2) return false;
+    if (getSharedStatus(s) === 'complete') return false;
+    const sDate = s.date instanceof Date ? s.date : new Date(s.date);
+    const daysDiff = (txnDate - sDate) / 86400000;
+    if (daysDiff < -7 || daysDiff > 60) return false; // cobro debe ser después del gasto (hasta 7 días antes para cubrir prepagos)
+    const owed = getSharedOwed(s);
+    const myShare = s.amount;
+    // Match if amount equals the owed total, one person's share, or within 5%
+    return Math.abs(t.amount - owed) / Math.max(owed,1) < 0.05 ||
+           Math.abs(t.amount - myShare) / Math.max(myShare,1) < 0.05;
+  });
+  return candidates.length ? candidates[0] : null;
 }
 
 function toggleSharedExpense() {
@@ -3225,6 +3328,7 @@ function saveTxn() {
     shared: isShared,
     sharedPeople: isShared ? sharedPeople : null,
     originalAmount: isShared ? originalAmount : null,
+    reimbursementFor: document.getElementById('txn-reimbursement-for')?.value || null,
     month: getMonthKey(date),
     week: getWeekKey(date),
   };
@@ -3362,6 +3466,13 @@ function showImportError(filename, msg, detail='') {
 function showImportReview(txns, dupes, filename) {
   // Merge dupes into the main list, tagged so user can decide
   dupes.forEach(t => { t.isDupe = true; t._incluir = false; });
+  // Auto-detect possible reimbursements
+  txns.forEach(t => {
+    if (!t.reimbursementFor) {
+      const match = detectReimbursementMatch(t);
+      if (match) t._suggestedReimbursementFor = match.id;
+    }
+  });
   _importPending = [...txns, ...dupes];
   _importDupes   = dupes;
   _importFilter  = 'all';
@@ -3489,13 +3600,28 @@ function renderImportList() {
          </div>`
       : `<button onclick="toggleImportShared(${realIdx})" style="flex-shrink:0;padding:3px 9px;border-radius:20px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text-secondary);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;" title="Gasto compartido">÷ Dividir</button>`;
 
+    // Reimbursement suggestion banner
+    const sugId = t._suggestedReimbursementFor;
+    const sugTxn = sugId ? state.transactions.find(x => x.id === sugId) : null;
+    const reimbLinked = t.reimbursementFor ? state.transactions.find(x => x.id === t.reimbursementFor) : null;
+    const reimburseBanner = reimbLinked
+      ? `<div style="font-size:10px;color:var(--blue);margin-top:2px;">🔗 Reembolso de: ${esc(reimbLinked.description)}</div>`
+      : sugTxn && !t.reimbursementFor
+        ? `<div style="display:flex;align-items:center;gap:6px;margin-top:3px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:6px;padding:3px 8px;">
+             <span style="font-size:10px;color:var(--blue);">🔗 ¿Reembolso de "${esc(sugTxn.description)}"?</span>
+             <button onclick="confirmImportReimbursement(${realIdx},'${sugId}')" style="font-size:10px;padding:1px 7px;border-radius:10px;border:1px solid var(--blue);background:transparent;color:var(--blue);cursor:pointer;font-weight:600;">Sí</button>
+             <button onclick="dismissImportReimbursement(${realIdx})" style="font-size:10px;padding:1px 7px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text-tertiary);cursor:pointer;">No</button>
+           </div>`
+        : '';
+
     const rowBg = !t.category ? 'background:var(--purple-glow);' : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--table-border);${rowBg}">
-      <div style="width:30px;height:30px;border-radius:50%;background:var(--glass);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">${getCatEmoji(t.category)}</div>
-      <div style="width:64px;flex-shrink:0;font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums;">${dateStr}</div>
+    return `<div style="display:flex;align-items:flex-start;gap:8px;padding:9px 14px;border-bottom:1px solid var(--table-border);${rowBg}">
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--glass);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:2px;">${getCatEmoji(t.category)}</div>
+      <div style="width:64px;flex-shrink:0;font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums;padding-top:2px;">${dateStr}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.description)}</div>
         <div style="font-size:10px;color:var(--text-tertiary);margin-top:1px;">${t.bank||''} ${t.tcId?'· TC':t.source==='cuenta'?'· Débito':''}</div>
+        ${reimburseBanner}
       </div>
       <div style="flex-shrink:0;">${catSelect}</div>
       <div style="flex-shrink:0;">${displayAmt}</div>
@@ -3504,6 +3630,20 @@ function renderImportList() {
       <button onclick="removeImportTxn(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Quitar">✕</button>
     </div>`;
   }).join('');
+}
+
+function confirmImportReimbursement(idx, sharedTxnId) {
+  if (_importPending[idx]) {
+    _importPending[idx].reimbursementFor = sharedTxnId;
+    delete _importPending[idx]._suggestedReimbursementFor;
+    if (!_importPending[idx].category) _importPending[idx].category = 'Transferencia';
+  }
+  renderImportList();
+}
+
+function dismissImportReimbursement(idx) {
+  if (_importPending[idx]) delete _importPending[idx]._suggestedReimbursementFor;
+  renderImportList();
 }
 
 function setImportTxnCat(idx, cat) {
@@ -5234,6 +5374,7 @@ function getFilteredTxns() {
   const status = document.getElementById('filter-status')?.value;
   const currency = document.getElementById('filter-currency')?.value;
   const shared = document.getElementById('filter-shared')?.value;
+  const reimbFilter = document.getElementById('filter-reimbursement')?.value;
   if (search) txns = txns.filter(t => t.description.toLowerCase().includes(search) || (t.category||'').toLowerCase().includes(search));
   if (month) txns = txns.filter(t => getMonthKey(t.date)===month);
   if (cat) txns = txns.filter(t => t.category===cat);
@@ -5241,6 +5382,10 @@ function getFilteredTxns() {
   if (currency) txns = txns.filter(t => t.currency===currency);
   if (shared === 'shared') txns = txns.filter(t => !!t.shared);
   if (shared === 'individual') txns = txns.filter(t => !t.shared);
+  if (reimbFilter === 'pending') txns = txns.filter(t => getSharedStatus(t) === 'pending');
+  else if (reimbFilter === 'partial') txns = txns.filter(t => getSharedStatus(t) === 'partial');
+  else if (reimbFilter === 'complete') txns = txns.filter(t => getSharedStatus(t) === 'complete');
+  else if (reimbFilter === 'is-reimbursement') txns = txns.filter(t => !!t.reimbursementFor);
   return txns.sort((a,b) => new Date(b.date)-new Date(a.date));
 }
 
@@ -5277,9 +5422,12 @@ function renderTxnPage(txns) {
       <td class="td-amount ${amtCls}" style="line-height:1.2;">
         ${['A COBRAR','COBRADO'].includes(status)?'+':''}${fmtM(t.amount,t.currency)}
         ${t.shared && t.sharedPeople > 1 ? `<div style="font-size:10px;color:var(--text-tertiary);font-weight:400;margin-top:1px;">de ${fmtM(Math.round(t.amount*t.sharedPeople),t.currency)} ÷${t.sharedPeople}</div>` : ''}
+        ${(()=>{ if(!t.shared||!t.sharedPeople||t.sharedPeople<2) return ''; const st=getSharedStatus(t); if(!st) return ''; const pending=getSharedOwed(t)-getSharedReceived(t); const cfg={pending:['🔴','var(--red)','Por cobrar $'+fmtN(getSharedOwed(t))],partial:['🟡','var(--orange)','Cobrado parcial · $'+fmtN(pending)+' pend.'],complete:['✅','var(--green)','Cobrado']}[st]; return `<div style="font-size:10px;font-weight:600;color:${cfg[1]};margin-top:2px;">${cfg[0]} ${cfg[2]}</div>`; })()}
+        ${t.reimbursementFor ? `<div style="font-size:10px;color:var(--blue);margin-top:1px;">🔗 Reembolso</div>` : ''}
       </td>
       <td style="text-align:center;font-size:12px;color:var(--text-tertiary);">${cuotaStr}</td>
       <td style="white-space:nowrap;">
+        ${['COBRADO','A COBRAR'].includes(status) && !t.reimbursementFor && !t.shared ? `<button class="btn btn-glass btn-icon btn-sm" onclick="openLinkReimbursement('${t.id}')" title="Vincular como reembolso" style="font-size:10px;">🔗</button>` : ''}
         <button class="btn btn-glass btn-icon btn-sm" onclick="openNewTxn('${t.id}')" title="Editar">✎</button>
         <button class="btn btn-danger btn-icon btn-sm" onclick="deleteTxn('${t.id}')" title="Eliminar">✕</button>
       </td>
@@ -6064,6 +6212,11 @@ function generateReport() {
     if (search && !t.description.toLowerCase().includes(search)) return false;
     if (shared === 'shared' && !t.shared) return false;
     if (shared === 'individual' && !!t.shared) return false;
+    const reimbR = document.getElementById('report-reimbursement')?.value;
+    if (reimbR === 'pending' && getSharedStatus(t) !== 'pending') return false;
+    if (reimbR === 'partial' && getSharedStatus(t) !== 'partial') return false;
+    if (reimbR === 'complete' && getSharedStatus(t) !== 'complete') return false;
+    if (reimbR === 'is-reimbursement' && !t.reimbursementFor) return false;
     return true;
   });
 
