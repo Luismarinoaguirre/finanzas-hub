@@ -3177,8 +3177,10 @@ function openNewTxn(id) {
   // Set defaults or edit values
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('txn-date').value = txn ? new Date(txn.date).toISOString().split('T')[0] : today;
-  document.getElementById('txn-desc').value = txn ? txn.description : '';
-  document.getElementById('txn-amount').value = txn ? txn.amount : '';
+  // When editing a shared txn, strip the "(÷N)" suffix added on save
+  document.getElementById('txn-desc').value = txn ? (txn.description||'').replace(/\s*\(÷\d+\)$/, '') : '';
+  // When editing a shared txn, show the ORIGINAL total amount (not the divided amount already stored)
+  document.getElementById('txn-amount').value = txn ? (txn.shared && txn.originalAmount ? txn.originalAmount : txn.amount) : '';
   document.getElementById('txn-currency').value = txn ? txn.currency : 'ARS';
   document.getElementById('txn-status').value = txn ? (txn.status || 'PAGADO') : 'PAGADO';
   document.getElementById('txn-bank').value = txn ? (txn.bank || '') : '';
@@ -3207,8 +3209,10 @@ function openNewTxn(id) {
 // ═══════════════════════════════════════════════
 function getSharedOwed(t) {
   // How much others owe Luis from a shared expense HE paid in full
+  // Uses originalAmount if available (more precise than amount * N due to rounding)
   if (!t.shared || !t.sharedPeople || t.sharedPeople < 2) return 0;
-  return Math.round(t.amount * (t.sharedPeople - 1));
+  const total = t.originalAmount || Math.round(t.amount * t.sharedPeople);
+  return Math.round(total * (t.sharedPeople - 1) / t.sharedPeople);
 }
 
 function getSharedReceived(t) {
@@ -3312,7 +3316,10 @@ function saveTxn() {
     amount = Math.round(amount / sharedPeople);
   }
 
+  // When editing, preserve fields not exposed in the form (source, learnedCat, etc.)
+  const existingTxn = editingTxnId ? state.transactions.find(t => t.id === editingTxnId) : null;
   const txn = {
+    ...(existingTxn || {}),
     id: editingTxnId || uid(),
     date,
     description: desc + (isShared ? ' (÷' + sharedPeople + ')' : ''),
@@ -3359,6 +3366,9 @@ function saveTxn() {
     const iIdx = window._editingImportIdx;
     if (_importPending[iIdx]) {
       _importPending[iIdx] = { ..._importPending[iIdx], ...txn };
+      // Keep _originalAmount in sync with originalAmount for the import display
+      if (txn.shared && txn.originalAmount) _importPending[iIdx]._originalAmount = txn.originalAmount;
+      else if (!txn.shared) _importPending[iIdx]._originalAmount = null;
     }
     window._editingImportIdx = null;
     closeModal('modal-txn');
@@ -3713,7 +3723,8 @@ function editImportTxn(idx) {
   const d = txn.date instanceof Date ? txn.date : new Date(txn.date);
   document.getElementById('txn-date').value = d instanceof Date && !isNaN(d) ? d.toISOString().split('T')[0] : '';
   document.getElementById('txn-desc').value = txn.description || '';
-  document.getElementById('txn-amount').value = txn.amount || '';
+  // Show original (pre-split) amount if this is a shared import txn
+  document.getElementById('txn-amount').value = (txn.shared && txn._originalAmount) ? txn._originalAmount : (txn.amount || '');
   document.getElementById('txn-currency').value = txn.currency || 'ARS';
   document.getElementById('txn-status').value = txn.status || 'PAGADO';
   document.getElementById('txn-bank').value = txn.bank || '';
@@ -5030,6 +5041,7 @@ function checkIncomeConfirmation(mk) {
   const today = new Date();
   const isCurrentMonth = mk === (today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0'));
   if (!isCurrentMonth) return; // only ask for current month
+  if (today.getDate() > 10) return; // only prompt in the first 10 days of the month
   const alreadyConfirmed = !!(state.monthlyIncome || {})[mk];
   if (alreadyConfirmed) return; // already saved for this month
   if (_incomePromptedThisSession[mk]) return; // already showed modal this session
@@ -5421,7 +5433,7 @@ function renderTxnPage(txns) {
       <td><span class="badge status-${statusCls}">${esc(status)}</span></td>
       <td class="td-amount ${amtCls}" style="line-height:1.2;">
         ${['A COBRAR','COBRADO'].includes(status)?'+':''}${fmtM(t.amount,t.currency)}
-        ${t.shared && t.sharedPeople > 1 ? `<div style="font-size:10px;color:var(--text-tertiary);font-weight:400;margin-top:1px;">de ${fmtM(Math.round(t.amount*t.sharedPeople),t.currency)} ÷${t.sharedPeople}</div>` : ''}
+        ${t.shared && t.sharedPeople > 1 ? `<div style="font-size:10px;color:var(--text-tertiary);font-weight:400;margin-top:1px;">de ${fmtM(t.originalAmount || Math.round(t.amount*t.sharedPeople),t.currency)} ÷${t.sharedPeople}</div>` : ''}
         ${(()=>{ if(!t.shared||!t.sharedPeople||t.sharedPeople<2) return ''; const st=getSharedStatus(t); if(!st) return ''; const pending=getSharedOwed(t)-getSharedReceived(t); const cfg={pending:['🔴','var(--red)','Por cobrar $'+fmtN(getSharedOwed(t))],partial:['🟡','var(--orange)','Cobrado parcial · $'+fmtN(pending)+' pend.'],complete:['✅','var(--green)','Cobrado']}[st]; return `<div style="font-size:10px;font-weight:600;color:${cfg[1]};margin-top:2px;">${cfg[0]} ${cfg[2]}</div>`; })()}
         ${t.reimbursementFor ? `<div style="font-size:10px;color:var(--blue);margin-top:1px;">🔗 Reembolso</div>` : ''}
       </td>
