@@ -2344,8 +2344,10 @@ tr:hover td { background: var(--table-hover); }
         <button onclick="setCatSort('custom')" id="cat-sort-custom" style="padding:5px 14px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:all .2s;">Custom</button>
       </div>
     </div>
-    <div id="cfg-cats" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
-    <div id="cat-reorder-hint" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:12px;">Usá las flechas ↑↓ para reordenar</div>
+    <div id="cfg-cats" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+    <div id="cat-reorder-hint" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Usá las flechas ↑↓ para reordenar</div>
+    <div id="cfg-excluded-hint" style="font-size:11px;color:var(--text-tertiary);margin-bottom:12px;font-style:italic;"></div>
+    <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:12px;">Tocá <strong>—</strong> en una categoría para excluirla de los totales de gasto (ej: Transferencia, pagos entre cuentas propias).</div>
     <div style="display:flex;gap:10px;">
       <input type="text" class="input-field" id="new-cat-input" placeholder="Nueva categoría..." style="max-width:240px;" onkeydown="if(event.key==='Enter')addCat()">
       <button class="btn btn-glass" onclick="addCat()">＋ Agregar</button>
@@ -2883,6 +2885,7 @@ let state = {
   budgets: {},
   monthlyIncome: {},
   ignoredDupes: [],
+  excludedCats: ['Transferencia'],
 };
 
 let chartInvPie = null;
@@ -3081,6 +3084,7 @@ function loadState() {
   state.inversiones = state.inversiones || [];
   state.monthlyIncome = state.monthlyIncome || {};
   state.ignoredDupes = state.ignoredDupes || [];
+  state.excludedCats = state.excludedCats || ['Transferencia'];
   // Normalize all categories to match canonical list (fixes ALL-CAPS from old imports)
   runCatNormalization();
 }
@@ -3088,6 +3092,10 @@ function loadState() {
 // ═══════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════
+// Returns true if a transaction counts as real spending (not a transfer between own accounts)
+function isSpending(t) {
+  return !(state.excludedCats || ['Transferencia']).includes(t.category);
+}
 function fmtN(n) { return Math.round(n).toLocaleString('es-AR'); }
 function fmtM(n, cur) { return (cur === 'USD' ? 'U$D ' : '$') + fmtN(n); }
 function getMonthKey(d) { const dt = d instanceof Date ? d : new Date(d); return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0'); }
@@ -5156,8 +5164,8 @@ function renderDashboard() {
   const isCurrentMonth = mk === getMonthKey(today);
   const monthTxns = state.transactions.filter(t => getMonthKey(t.date) === mk);
 
-  const arsGastos = monthTxns.filter(t => t.currency==='ARS' && ['PAGADO','A PAGAR'].includes(t.status||'PAGADO')).reduce((s,t)=>s+t.amount,0);
-  const usdGastos = monthTxns.filter(t => t.currency==='USD').reduce((s,t)=>s+t.amount,0);
+  const arsGastos = monthTxns.filter(t => t.currency==='ARS' && ['PAGADO','A PAGAR'].includes(t.status||'PAGADO') && isSpending(t)).reduce((s,t)=>s+t.amount,0);
+  const usdGastos = monthTxns.filter(t => t.currency==='USD' && isSpending(t)).reduce((s,t)=>s+t.amount,0);
   const totalARS = arsGastos + (usdGastos * state.usdRate);
 
   // Income — per-month if set, else global fallback
@@ -5211,8 +5219,8 @@ function renderDashboard() {
   }
 
   // Débito (source='cuenta') vs Crédito (source='tc') split
-  const debitoTxns = monthTxns.filter(t => t.source === 'cuenta' && t.currency === 'ARS' && ['PAGADO','A PAGAR'].includes(t.status||'PAGADO'));
-  const creditoTxns = monthTxns.filter(t => t.source === 'tc' && t.currency === 'ARS');
+  const debitoTxns = monthTxns.filter(t => t.source === 'cuenta' && t.currency === 'ARS' && ['PAGADO','A PAGAR'].includes(t.status||'PAGADO') && isSpending(t));
+  const creditoTxns = monthTxns.filter(t => t.source === 'tc' && t.currency === 'ARS' && isSpending(t));
   const debitoTotal = debitoTxns.reduce((s,t)=>s+t.amount,0);
   const creditoTotal = creditoTxns.reduce((s,t)=>s+t.amount,0);
   const combinedTotal = debitoTotal + creditoTotal + (usdGastos * state.usdRate);
@@ -5274,7 +5282,7 @@ function renderWeeklyChart(txns) {
   let labels, data, data2;
   if (chartMode === 'week') {
     const byWeek = {};
-    txns.filter(t=>t.currency==='ARS').forEach(t => {
+    txns.filter(t=>t.currency==='ARS' && isSpending(t)).forEach(t => {
       const k = t.week || getWeekKey(t.date);
       byWeek[k] = (byWeek[k]||0)+t.amount;
     });
@@ -5283,7 +5291,7 @@ function renderWeeklyChart(txns) {
     data = sorted.map(([,v])=>v);
   } else {
     const byMonth = {};
-    state.transactions.filter(t=>t.currency==='ARS').forEach(t => {
+    state.transactions.filter(t=>t.currency==='ARS' && isSpending(t)).forEach(t => {
       const k = getMonthKey(t.date);
       byMonth[k] = (byMonth[k]||0)+t.amount;
     });
@@ -5348,7 +5356,7 @@ function renderWeeklyChart(txns) {
 
 function renderCatBars(txns) {
   const bycat = {};
-  txns.filter(t=>t.currency==='ARS').forEach(t => { bycat[t.category||'Otros'] = (bycat[t.category||'Otros']||0)+t.amount; });
+  txns.filter(t=>t.currency==='ARS' && isSpending(t)).forEach(t => { bycat[t.category||'Otros'] = (bycat[t.category||'Otros']||0)+t.amount; });
   const sorted = Object.entries(bycat).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const max = sorted[0]?.[1]||1;
   const el = document.getElementById('cat-bars');
@@ -5363,7 +5371,7 @@ function renderCatBars(txns) {
 }
 
 function renderTop5(txns) {
-  const top5 = [...(txns||[])].filter(t=>t.currency==='ARS').sort((a,b)=>b.amount-a.amount).slice(0,5);
+  const top5 = [...(txns||[])].filter(t=>t.currency==='ARS' && isSpending(t)).sort((a,b)=>b.amount-a.amount).slice(0,5);
   const el = document.getElementById('top5-grid');
   el.style.gridTemplateColumns = `repeat(${Math.max(1,top5.length)},1fr)`;
   if (!top5.length) { el.innerHTML='<div class="empty-state" style="padding:24px;"><div class="empty-sub">Sin movimientos</div></div>'; return; }
@@ -5382,7 +5390,7 @@ function renderTop5(txns) {
 function updateSidebarBalance() {
   const mk = getActiveDashMonth();
   const monthTxns = state.transactions.filter(t => getMonthKey(t.date)===mk);
-  const gastos = monthTxns.filter(t=>t.currency==='ARS'&&['PAGADO','A PAGAR'].includes(t.status||'PAGADO')).reduce((s,t)=>s+t.amount,0);
+  const gastos = monthTxns.filter(t=>t.currency==='ARS'&&['PAGADO','A PAGAR'].includes(t.status||'PAGADO')&&isSpending(t)).reduce((s,t)=>s+t.amount,0);
   const ingresos = state.income.ars + state.income.arsVar + (state.income.usd+state.income.usdVar)*state.usdRate;
   const margen = ingresos > 0 ? ingresos - gastos : null;
   const sbA = document.getElementById('sb-amount');
@@ -6682,15 +6690,35 @@ function renderSettings() {
 
   if (catsEl) catsEl.innerHTML = displayCats.map((c) => {
     const realIdx = state.categories.indexOf(c);
+    const isExcl = (state.excludedCats||[]).includes(c);
     const arrows = catSort === 'custom'
       ? `<button onclick="moveCat(${realIdx},-1)" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.5;font-size:10px;padding:0;line-height:1;" title="Subir">▲</button>
          <button onclick="moveCat(${realIdx},1)" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.5;font-size:10px;padding:0;line-height:1;" title="Bajar">▼</button>` : '';
-    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;background:${catColor(c)}18;border:1px solid ${catColor(c)}33;font-size:12px;font-weight:600;color:${catColor(c)};">
+    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;background:${isExcl?'var(--glass)':catColor(c)+'18'};border:1px solid ${isExcl?'var(--border)':catColor(c)+'33'};font-size:12px;font-weight:600;color:${isExcl?'var(--text-tertiary)':catColor(c)};${isExcl?'text-decoration:line-through;opacity:.7;':''}">
       ${arrows}${esc(c)}
+      <button onclick="toggleExcludedCat('${esc(c)}')" title="${isExcl?'Incluir en gastos':'Excluir de totales (transferencia, etc.)'}" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.7;font-size:11px;padding:0;line-height:1;">${isExcl?'＋':'—'}</button>
       <button onclick="removeCat(${realIdx})" style="background:none;border:none;color:inherit;cursor:pointer;opacity:0.6;font-size:13px;padding:0;line-height:1;">×</button>
     </span>`;
   }).join('');
+
+  // Excluded cats legend
+  const excl = state.excludedCats || [];
+  const exclEl = document.getElementById('cfg-excluded-hint');
+  if (exclEl) exclEl.textContent = excl.length
+    ? '— excluye de totales: ' + excl.join(', ')
+    : 'Ninguna categoría excluida de los totales';
+
   renderBudgetSettings();
+}
+
+function toggleExcludedCat(cat) {
+  if (!state.excludedCats) state.excludedCats = [];
+  const idx = state.excludedCats.indexOf(cat);
+  if (idx >= 0) state.excludedCats.splice(idx, 1);
+  else state.excludedCats.push(cat);
+  saveState();
+  renderSettings();
+  renderDashboard();
 }
 
 function addCat() {
@@ -7204,7 +7232,11 @@ function init() {
   updateSidebarBalance();
   updateReviewBadge();
   if (state.transactions.length) showDashContent();
-  generateRecurringTransactions(getMonthKey(new Date()));
+  // Generate recurring expenses for current month AND next month (so projections are visible)
+  const nowDate = new Date();
+  generateRecurringTransactions(getMonthKey(nowDate));
+  const nextMonth = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 1);
+  generateRecurringTransactions(getMonthKey(nextMonth));
 
   // Set today's date in txn modal
   document.getElementById('txn-date').value = new Date().toISOString().split('T')[0];
