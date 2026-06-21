@@ -1340,6 +1340,7 @@ tr:hover td { background: var(--table-hover); }
   </button>
   <button class="nav-item" id="ni-transactions" data-tooltip="Movimientos" onclick="nav('transactions')">
     <span class="nav-icon">↕</span> <span>Movimientos</span>
+    <span id="review-badge" style="display:none;margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;line-height:1.4;"></span>
   </button>
   <button class="nav-item" id="ni-cuentas" data-tooltip="Cuentas" onclick="nav('cuentas')">
     <span class="nav-icon">🏦</span> <span>Cuentas</span>
@@ -1600,6 +1601,11 @@ tr:hover td { background: var(--table-hover); }
         <option value="partial">🟡 Cobrado parcial</option>
         <option value="complete">✅ Cobrado</option>
         <option value="is-reimbursement">🔗 Es reembolso</option>
+      </select>
+      <select class="filter-select" id="filter-review" onchange="renderTransactions()" style="border-color:var(--red);color:var(--red);" title="Movimientos marcados para revisar">
+        <option value="" style="color:var(--text-primary);">⚑ Todos</option>
+        <option value="review">⚑ Para revisar</option>
+        <option value="ok">✓ Revisados</option>
       </select>
     </div>
   </div>
@@ -2476,6 +2482,15 @@ tr:hover td { background: var(--table-hover); }
         </div>
       </div>
     </div>
+    <!-- Para revisar flag -->
+    <div style="padding:0 20px 16px;display:flex;align-items:center;gap:10px;">
+      <label style="position:relative;width:36px;height:20px;cursor:pointer;flex-shrink:0;">
+        <input type="checkbox" id="txn-needs-review" onchange="syncReviewToggle()" style="opacity:0;width:0;height:0;position:absolute;">
+        <span id="txn-review-track" style="position:absolute;inset:0;background:var(--glass-border);border-radius:10px;transition:.3s;"></span>
+        <span id="txn-review-thumb" style="position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,0.15);"></span>
+      </label>
+      <span style="font-size:13px;color:var(--text-secondary);">⚑ Marcar para revisar después</span>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-glass" onclick="cancelTxnModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveTxn()">Guardar</button>
@@ -2885,6 +2900,7 @@ function saveState() {
     localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
     localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
     debouncedCloudPush();
+    updateReviewBadge();
   } catch(e) {}
 }
 
@@ -3196,6 +3212,11 @@ function openNewTxn(id) {
   document.getElementById('txn-shared-people').value = txn ? (txn.sharedPeople || 2) : 2;
   toggleSharedExpense();
 
+  // Needs review flag
+  const reviewCb = document.getElementById('txn-needs-review');
+  reviewCb.checked = txn ? !!txn.needsReview : false;
+  syncReviewToggle();
+
   // Reimbursement section — show only for COBRADO/A COBRAR
   populateReimbursementSelect(txn);
   document.getElementById('txn-status').addEventListener('change', () => populateReimbursementSelect(null), { once: true });
@@ -3260,6 +3281,24 @@ function populateReimbursementSelect(txn) {
 function openLinkReimbursement(cobradoId) {
   openNewTxn(cobradoId);
   // Status is already COBRADO, the select will auto-populate
+}
+
+function syncReviewToggle() {
+  const cb = document.getElementById('txn-needs-review');
+  const track = document.getElementById('txn-review-track');
+  const thumb = document.getElementById('txn-review-thumb');
+  if (!cb || !track || !thumb) return;
+  track.style.background = cb.checked ? 'var(--red)' : 'var(--glass-border)';
+  thumb.style.left = cb.checked ? '18px' : '2px';
+}
+
+// Quick-toggle needsReview without opening edit modal
+function toggleNeedsReview(id) {
+  const t = state.transactions.find(x => x.id === id);
+  if (!t) return;
+  t.needsReview = !t.needsReview;
+  saveState();
+  renderTxnPage(getFilteredTxns());
 }
 
 // Auto-detect possible reimbursements for a COBRADO transaction
@@ -3336,6 +3375,7 @@ function saveTxn() {
     sharedPeople: isShared ? sharedPeople : null,
     originalAmount: isShared ? originalAmount : null,
     reimbursementFor: document.getElementById('txn-reimbursement-for')?.value || null,
+    needsReview: document.getElementById('txn-needs-review')?.checked || false,
     month: getMonthKey(date),
     week: getWeekKey(date),
   };
@@ -3636,6 +3676,7 @@ function renderImportList() {
       <div style="flex-shrink:0;">${catSelect}</div>
       <div style="flex-shrink:0;">${displayAmt}</div>
       ${sharedBtn}
+      <button onclick="toggleImportReview(${realIdx})" style="background:none;border:none;color:${t.needsReview?'var(--red)':'var(--text-tertiary)'};cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="${t.needsReview?'Quitar marca de revisión':'Marcar para revisar después'}">⚑</button>
       <button onclick="editImportTxn(${realIdx})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Editar">✎</button>
       <button onclick="removeImportTxn(${realIdx})" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;border-radius:4px;" title="Quitar">✕</button>
     </div>`;
@@ -3676,6 +3717,13 @@ function toggleImportDupe(idx) {
   if (!t || !t.isDupe) return;
   t._incluir = !t._incluir;
   updateImportConfirmLabel();
+  renderImportList();
+}
+
+function toggleImportReview(idx) {
+  const t = _importPending[idx];
+  if (!t) return;
+  t.needsReview = !t.needsReview;
   renderImportList();
 }
 
@@ -5349,6 +5397,14 @@ function updateSidebarBalance() {
   }
 }
 
+function updateReviewBadge() {
+  const count = state.transactions.filter(t => t.needsReview).length;
+  const badge = document.getElementById('review-badge');
+  if (!badge) return;
+  badge.style.display = count > 0 ? '' : 'none';
+  badge.textContent = count;
+}
+
 // ═══════════════════════════════════════════════
 //  TRANSACTIONS PAGE
 // ═══════════════════════════════════════════════
@@ -5387,6 +5443,7 @@ function getFilteredTxns() {
   const currency = document.getElementById('filter-currency')?.value;
   const shared = document.getElementById('filter-shared')?.value;
   const reimbFilter = document.getElementById('filter-reimbursement')?.value;
+  const reviewFilter = document.getElementById('filter-review')?.value;
   if (search) txns = txns.filter(t => t.description.toLowerCase().includes(search) || (t.category||'').toLowerCase().includes(search));
   if (month) txns = txns.filter(t => getMonthKey(t.date)===month);
   if (cat) txns = txns.filter(t => t.category===cat);
@@ -5398,6 +5455,8 @@ function getFilteredTxns() {
   else if (reimbFilter === 'partial') txns = txns.filter(t => getSharedStatus(t) === 'partial');
   else if (reimbFilter === 'complete') txns = txns.filter(t => getSharedStatus(t) === 'complete');
   else if (reimbFilter === 'is-reimbursement') txns = txns.filter(t => !!t.reimbursementFor);
+  if (reviewFilter === 'review') txns = txns.filter(t => !!t.needsReview);
+  else if (reviewFilter === 'ok') txns = txns.filter(t => !t.needsReview);
   return txns.sort((a,b) => new Date(b.date)-new Date(a.date));
 }
 
@@ -5425,9 +5484,11 @@ function renderTxnPage(txns) {
     const tc = t.tcId ? state.creditCards.find(c=>c.id===t.tcId) : null;
     const cuotaStr = t.cuotaNum && t.cuotaTotal ? `${t.cuotaNum}/${t.cuotaTotal}` : '—';
     const amtCls = ['A COBRAR','COBRADO'].includes(status) ? 'positive' : '';
-    return `<tr>
+    return `<tr${t.needsReview ? ' style="background:rgba(248,113,113,0.04);"' : ''}>
       <td style="color:var(--text-tertiary);font-size:12px;">${dateStr}</td>
-      <td class="td-desc">${esc(t.description)}</td>
+      <td class="td-desc">
+        ${t.needsReview ? '<span style="display:inline-block;width:7px;height:7px;background:var(--red);border-radius:50%;margin-right:5px;vertical-align:middle;flex-shrink:0;" title="Para revisar"></span>' : ''}${esc(t.description)}
+      </td>
       <td><span class="badge" style="background:${catColor(t.category||'Otros')}22;color:${catColor(t.category||'Otros')};border:1px solid ${catColor(t.category||'Otros')}33;">${esc(t.category||'Otros')}</span></td>
       <td style="font-size:12px;">${tc?`<span style="color:${tc.color||'var(--blue-light)'};font-weight:600;">💳 ${esc(tc.name)}</span>`:esc(t.bank||'—')}</td>
       <td><span class="badge status-${statusCls}">${esc(status)}</span></td>
@@ -5440,6 +5501,7 @@ function renderTxnPage(txns) {
       <td style="text-align:center;font-size:12px;color:var(--text-tertiary);">${cuotaStr}</td>
       <td style="white-space:nowrap;">
         ${['COBRADO','A COBRAR'].includes(status) && !t.reimbursementFor && !t.shared ? `<button class="btn btn-glass btn-icon btn-sm" onclick="openLinkReimbursement('${t.id}')" title="Vincular como reembolso" style="font-size:10px;">🔗</button>` : ''}
+        <button class="btn btn-glass btn-icon btn-sm" onclick="toggleNeedsReview('${t.id}')" title="${t.needsReview ? 'Marcar como revisado' : 'Marcar para revisar'}" style="color:${t.needsReview ? 'var(--red)' : 'var(--text-tertiary)'};">⚑</button>
         <button class="btn btn-glass btn-icon btn-sm" onclick="openNewTxn('${t.id}')" title="Editar">✎</button>
         <button class="btn btn-danger btn-icon btn-sm" onclick="deleteTxn('${t.id}')" title="Eliminar">✕</button>
       </td>
@@ -7140,6 +7202,7 @@ function init() {
   loadState();
   renderDashboard();
   updateSidebarBalance();
+  updateReviewBadge();
   if (state.transactions.length) showDashContent();
   generateRecurringTransactions(getMonthKey(new Date()));
 
