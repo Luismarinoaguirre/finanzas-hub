@@ -72,7 +72,7 @@ Lineas 2700-6400 → <script> inline (JS completo, ~3700 lineas)
 - Cloud Sync: loadState, saveState, cloudPush, cloudPull
 - Navigation: nav(), mobileNav(), sidebar
 - Theme: setTheme, initTheme, getChartColors
-- PDF Import: processPDF, parseGaliciaPDF, parseBrubankPDF, parseBrubankVisaPDF
+- PDF Import: processPDF, parseGaliciaPDF, parseGaliciaDebitPDF, parseBrubankPDF, parseBrubankVisaPDF
 - Auto-categorization: auto_cat (regex rules) + learnedCat (ML from user history)
 - Dashboard: renderDashboard, renderWeeklyChart, renderCatBars, renderTop5, renderDashCuotas
 - Transactions: populateFilters, renderTransactions
@@ -118,6 +118,7 @@ Lineas 2700-6400 → <script> inline (JS completo, ~3700 lineas)
 | Parser | Banco | Formato fecha | Detectado por |
 |--------|-------|---------------|---------------|
 | `parseGaliciaPDF` | Galicia (TC Amex/Visa) | DD.MM.YYYY | "DETALLE DE TRANSACCION" o "Banco de Galicia" |
+| `parseGaliciaDebitPDF` | Galicia (Caja de ahorro) | DD/MM/YYYY | "Banco Galicia" + "Caja de ahorro" |
 | `parseBrubankPDF` | Brubank (extracto cuenta) | DD-MM-YY | "brubank" + "Caja De Ahorro" |
 | `parseBrubankVisaPDF` | Brubank (TC Visa) | YYYY-MM-DD | "brubank" + "Ciclo de facturación" |
 

@@ -4477,10 +4477,13 @@ function processPDF(file) {
       // Auto-detect format
       let txns = [];
       const isBrubank = fullText.includes('brubank') || fullText.includes('Brubank');
-      const isGalicia = fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia');
+      const isGaliciaTC = fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia');
+      const isGaliciaDebit = /Banco Galicia/i.test(fullText) && /Caja de ahorro/i.test(fullText);
       const isBrubankVisa = isBrubank && (fullText.includes('Ciclo de facturación') || fullText.includes('Tarjeta') || fullText.includes('Vencimiento actual'));
 
-      if (isGalicia) {
+      if (isGaliciaDebit) {
+        txns = parseGaliciaDebitPDF(lines);
+      } else if (isGaliciaTC) {
         txns = parseGaliciaPDF(lines);
       } else if (isBrubankVisa) {
         txns = parseBrubankVisaPDF(lines);
@@ -4493,6 +4496,7 @@ function processPDF(file) {
         txns = parseBrubankVisaPDF(lines);
         if (!txns.length) txns = parseBrubankPDF(lines);
         if (!txns.length) txns = parseGaliciaPDF(lines);
+        if (!txns.length) txns = parseGaliciaDebitPDF(lines);
       }
 
       if (!txns.length) {
@@ -4500,7 +4504,7 @@ function processPDF(file) {
         showImportError(file.name,
           'No se encontraron movimientos en el PDF.',
           '<b>Primeras líneas detectadas:</b><br>' + sample +
-          '<br><br>Soportamos: <b>Brubank</b> (extracto de cuenta) y <b>Galicia</b> (resumen Amex/Visa).'
+          '<br><br>Soportamos: <b>Brubank</b> (extracto de cuenta), <b>Galicia</b> (resumen Amex/Visa) y <b>Galicia</b> (caja de ahorro).'
         ); return;
       }
       finishImport(txns, file.name);
@@ -4582,6 +4586,39 @@ function parseGaliciaPDF(lines) {
       empresa: '', cuotaNum: cm?parseInt(cm[1]):null, cuotaTotal: cm?parseInt(cm[2]):null,
       month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
       week: '', source: 'tc'
+    });
+  }
+  return txns;
+}
+
+function parseGaliciaDebitPDF(lines) {
+  const txns = [];
+  const pAR = s => {
+    if (!s) return 0;
+    const clean = s.replace(/[^\d,.]/g,'').replace(/\./g,'').replace(',','.');
+    return parseFloat(clean) || 0;
+  };
+  // Lines like: "29/06/2026 Anulación reintegro promo Galicia -$2.695,20"
+  // or:         "02/06/2026 Crédito transferencia COELSA $1.468.226,58"
+  const txnRe = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?\$\s*[\d.]+,\d{2})\s*$/;
+  for (const line of lines) {
+    if (/^Total\s+(cr[eé]ditos|d[eé]bitos)|^Resultado neto/i.test(line.trim())) continue;
+    const m = line.match(txnRe);
+    if (!m) continue;
+    const [, dateStr, desc, amtStr] = m;
+    const dp = dateStr.split('/');
+    const pd = new Date(parseInt(dp[2]), parseInt(dp[1])-1, parseInt(dp[0]));
+    if (isNaN(pd.getTime())) continue;
+    const amount = pAR(amtStr);
+    if (!amount) continue;
+    const isGasto = amtStr.trim().startsWith('-');
+    txns.push({
+      id: uid(), date: pd, description: desc.trim(), amount: Math.round(amount*100)/100,
+      currency: 'ARS', category: auto_cat(desc),
+      status: isGasto ? 'PAGADO' : 'COBRADO',
+      bank: 'Galicia', tcId: '', empresa: '', cuotaNum: null, cuotaTotal: null,
+      month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
+      week: '', source: 'cuenta'
     });
   }
   return txns;
