@@ -14,6 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ═══════════════════════════════════════
    LIQUID GLASS DESIGN SYSTEM
@@ -1399,7 +1400,7 @@ tr:hover td { background: var(--table-hover); }
       </select>
       <button class="btn btn-glass" onclick="openNewTxn()">＋ Cargar</button>
       <button class="btn btn-primary" onclick="document.getElementById('csvInput').click()">↑ Subir Archivo</button>
-      <button class="btn" id="cloud-sync-btn" onclick="cloudSyncFull()" style="background:var(--blue);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;margin-left:6px;">☁ Sync</button>
+      <button class="btn" id="cloud-sync-btn" onclick="supabaseSyncFull()" style="background:var(--blue);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;margin-left:6px;">☁ Sync</button>
     </div>
   </div>
 
@@ -2894,10 +2895,13 @@ function getChartColors() {
 }
 
 // ═══════════════════════════════════════════════
-//  CLOUD SYNC CONFIG
+//  SUPABASE CONFIG
 // ═══════════════════════════════════════════════
-const CLOUD_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwZkKBM1Bv_6WA-E1gpnYavesVJdQlQR4gxYuOLp-QQBTp10ERM0_5-aWeSPUjlkEYKug/exec';
-let _cloudSyncTimer = null;
+const SUPABASE_URL = 'https://ntspguwfocdidwngjurg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50c3BndXdmb2NkaWR3bmdqdXJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0MTAzMDUsImV4cCI6MjA5OTk4NjMwNX0.AnwRYsvJGPMDkoX_H2uRkhZ91N-qIOjy_enerEPGZ7s';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var _supabaseSyncTimer = null;
+var _syncStatus = 'idle'; // idle | syncing | ok | error
 
 // ═══════════════════════════════════════════════
 //  STATE
@@ -2941,111 +2945,162 @@ function saveState() {
   try {
     localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
     localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
-    debouncedCloudPush();
+    debouncedSupabasePush();
     updateReviewBadge();
   } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════
-//  CLOUD SYNC (between devices)
+//  SUPABASE SYNC
 // ═══════════════════════════════════════════════
-async function cloudSyncPush() {
-  if (!CLOUD_SYNC_URL) return;
-  try {
-    const data = {
-      timestamp: Date.now(),
-      state: JSON.parse(localStorage.getItem('finanzas_hub_v4') || '{}')
-    };
-    await fetch(CLOUD_SYNC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-      mode: 'no-cors'
-    });
-  } catch(e) {
-    console.warn('Cloud sync push failed:', e);
-  }
-}
-
-async function cloudSyncPull() {
-  if (!CLOUD_SYNC_URL) return null;
-  try {
-    const res = await fetch(CLOUD_SYNC_URL);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.timestamp && data.state) {
-      return data;
-    }
-    return null;
-  } catch(e) {
-    console.warn('Cloud sync pull failed:', e);
-    return null;
-  }
-}
-
-function debouncedCloudPush() {
-  if (_cloudSyncTimer) clearTimeout(_cloudSyncTimer);
-  _cloudSyncTimer = setTimeout(() => cloudSyncPush(), 3000);
-}
-
-async function cloudSyncFull() {
+function updateSyncIndicator(status, msg) {
+  _syncStatus = status;
   const btn = document.getElementById('cloud-sync-btn');
-  if (btn) { btn.disabled = true; btn.innerHTML = '☁ Sincronizando…'; }
+  if (!btn) return;
+  const icons = { idle: '☁', syncing: '⟳', ok: '✓', error: '✕' };
+  const colors = { idle: 'var(--blue)', syncing: 'var(--blue)', ok: '#22c55e', error: '#ef4444' };
+  btn.style.background = colors[status] || 'var(--blue)';
+  btn.innerHTML = (icons[status] || '☁') + ' ' + (msg || 'Sync');
+  if (status === 'ok') setTimeout(() => updateSyncIndicator('idle', 'Sync'), 3000);
+}
 
+function serializeState() {
+  const s = JSON.parse(JSON.stringify(state));
+  s.transactions = s.transactions.map(t => {
+    if (t.date instanceof Date) t.date = t.date.toISOString();
+    return t;
+  });
+  return s;
+}
+
+function rehydrateState(s) {
+  if (!s) return s;
+  if (s.transactions) s.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
+  return s;
+}
+
+async function supabasePush() {
+  const session = (await sb.auth.getSession()).data.session;
+  if (!session) return;
+  updateSyncIndicator('syncing', 'Guardando…');
+  const payload = { user_id: session.user.id, state: serializeState(), updated_at: new Date().toISOString() };
+  const { error } = await sb.from('app_state').upsert(payload, { onConflict: 'user_id' });
+  if (error) {
+    console.error('Supabase push failed:', error);
+    updateSyncIndicator('error', 'Error');
+    showToast('Error guardando en la nube: ' + error.message, 'error');
+  } else {
+    updateSyncIndicator('ok', 'Guardado');
+  }
+}
+
+async function supabasePull() {
+  const session = (await sb.auth.getSession()).data.session;
+  if (!session) return null;
+  const { data, error } = await sb.from('app_state').select('state, updated_at').eq('user_id', session.user.id).single();
+  if (error && error.code !== 'PGRST116') { console.error('Supabase pull failed:', error); return null; }
+  return data || null;
+}
+
+function debouncedSupabasePush() {
+  if (_supabaseSyncTimer) clearTimeout(_supabaseSyncTimer);
+  _supabaseSyncTimer = setTimeout(() => supabasePush(), 2000);
+}
+
+async function supabaseSyncFull() {
+  const session = (await sb.auth.getSession()).data.session;
+  if (!session) { showAuthModal(); return; }
+  updateSyncIndicator('syncing', 'Sincronizando…');
   try {
-    // Pull from cloud
-    const cloud = await cloudSyncPull();
-    const localTimestamp = parseInt(localStorage.getItem('finanzas_hub_v4_ts') || '0');
-
-    let newFromCloud = [];
-    if (cloud && cloud.timestamp > localTimestamp) {
-      // Cloud is newer - merge cloud data
-      const cloudState = cloud.state;
+    const cloud = await supabasePull();
+    if (cloud && cloud.state) {
+      const cloudState = rehydrateState(cloud.state);
       if (cloudState.transactions && cloudState.transactions.length > 0) {
-        // Merge transactions: keep all unique by ID
-        const localIds = new Set(state.transactions.map(t => t.id));
-        newFromCloud = cloudState.transactions.filter(t => !localIds.has(t.id));
-        newFromCloud.forEach(t => { if (t.date) t.date = new Date(t.date); });
-        if (newFromCloud.length > 0) {
-          state.transactions = [...state.transactions, ...newFromCloud];
-        }
-        // Also check if cloud has updates to existing transactions
+        const localById = {};
+        state.transactions.forEach(t => { localById[t.id] = t; });
         const cloudById = {};
         cloudState.transactions.forEach(t => { cloudById[t.id] = t; });
-        state.transactions = state.transactions.map(t => {
-          if (cloudById[t.id]) {
-            const ct = { ...cloudById[t.id] };
-            ct.date = new Date(ct.date);
-            return ct;
-          }
-          return t;
+        const mergedById = { ...cloudById, ...localById };
+        Object.keys(cloudById).forEach(id => {
+          if (!localById[id]) mergedById[id] = cloudById[id];
         });
+        state.transactions = Object.values(mergedById);
+        state.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
       }
-      // Merge config (non-transaction state)
-      const { transactions: _t, ...cloudConfig } = cloudState;
-      const { transactions: _t2, ...localConfig } = state;
+      const { transactions: _ct, ...cloudConfig } = cloudState;
       state = { ...state, ...cloudConfig, transactions: state.transactions };
-
-      saveState();
-      showToast('☁ ' + newFromCloud.length + ' cambios sincronizados desde la nube', 'success');
-    } else {
-      showToast('☁ Todo sincronizado', 'success');
     }
-
-    // Push current state to cloud
+    localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
     localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
-    await cloudSyncPush();
-
-    // Refresh UI
+    await supabasePush();
     if (typeof renderDashboard === 'function') renderDashboard();
     if (typeof updateSidebarBalance === 'function') updateSidebarBalance();
-
+    const n = state.transactions.length;
+    showToast('☁ Sincronizado · ' + n + ' movimientos', 'success');
   } catch(e) {
-    console.error('Cloud sync error:', e);
+    console.error('Sync error:', e);
+    updateSyncIndicator('error', 'Error');
     showToast('Error de sincronización: ' + e.message, 'error');
   }
+}
 
-  if (btn) { btn.disabled = false; btn.innerHTML = '☁ Sync'; }
+// ═══════════════════════════════════════════════
+//  SUPABASE AUTH
+// ═══════════════════════════════════════════════
+function showAuthModal() {
+  let modal = document.getElementById('auth-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'auth-modal';
+    modal.className = 'modal-overlay open';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:400px">
+        <div class="modal-header"><h2>Iniciar sesión</h2></div>
+        <div class="modal-body">
+          <p style="margin-bottom:12px;color:var(--text-secondary)">Ingresá tu email para recibir un link de acceso y sincronizar tus datos en la nube.</p>
+          <input type="email" id="auth-email" class="txn-input" placeholder="tu@email.com" value="luismarinoaguirree@gmail.com" style="width:100%;margin-bottom:12px">
+          <div id="auth-otp-section" style="display:none">
+            <p style="margin-bottom:8px;color:var(--text-secondary)">Ingresá el código de 6 dígitos que te enviamos:</p>
+            <input type="text" id="auth-otp" class="txn-input" placeholder="000000" maxlength="6" style="width:100%;text-align:center;font-size:1.5rem;letter-spacing:0.5em;margin-bottom:12px">
+          </div>
+          <div id="auth-error" style="color:#ef4444;font-size:0.85rem;margin-bottom:8px;display:none"></div>
+          <button id="auth-submit-btn" class="btn btn-primary" onclick="handleAuth()" style="width:100%">Enviar código</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  } else {
+    modal.classList.add('open');
+  }
+}
+
+async function handleAuth() {
+  const btn = document.getElementById('auth-submit-btn');
+  const errEl = document.getElementById('auth-error');
+  const otpSection = document.getElementById('auth-otp-section');
+  errEl.style.display = 'none';
+
+  if (otpSection.style.display === 'none') {
+    const email = document.getElementById('auth-email').value.trim();
+    if (!email) { errEl.textContent = 'Ingresá tu email'; errEl.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    const { error } = await sb.auth.signInWithOtp({ email });
+    btn.disabled = false;
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; btn.textContent = 'Enviar código'; return; }
+    otpSection.style.display = 'block';
+    btn.textContent = 'Verificar código';
+    document.getElementById('auth-otp').focus();
+  } else {
+    const email = document.getElementById('auth-email').value.trim();
+    const token = document.getElementById('auth-otp').value.trim();
+    if (!token || token.length < 6) { errEl.textContent = 'Ingresá el código de 6 dígitos'; errEl.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = 'Verificando…';
+    const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
+    btn.disabled = false;
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; btn.textContent = 'Verificar código'; return; }
+    document.getElementById('auth-modal').classList.remove('open');
+    showToast('Sesión iniciada correctamente', 'success');
+    await supabaseSyncFull();
+  }
 }
 
 // Default config embedded from user's backup — used when no localStorage exists
@@ -3080,42 +3135,27 @@ const DEFAULT_STATE = {
 };
 
 function loadState() {
-  // Always start from embedded data (1232 transactions pre-loaded)
-  // Rehydrate date strings to Date objects
   DEFAULT_STATE.transactions.forEach(t => {
     if (t.date && typeof t.date === 'string') t.date = new Date(t.date);
   });
 
-  // Load config from localStorage (cards, income, settings) but IGNORE stored transactions
-  // This avoids the "empty localStorage overwrites embedded data" bug
+  // Try localStorage first (fast, offline)
   try {
     const s = localStorage.getItem('finanzas_hub_v4');
     if (s) {
       const parsed = JSON.parse(s);
-      // Take everything EXCEPT transactions from localStorage
-      const { transactions: _ignored, ...config } = parsed;
-      state = { ...DEFAULT_STATE, ...config };
-      // Preserve accounts from localStorage if user modified them, else use defaults
-      if (!parsed.accounts || parsed.accounts.length === 0) {
-        state.accounts = DEFAULT_STATE.accounts;
-      }
-      // Re-attach embedded transactions (already have Date objects)
-      state.transactions = DEFAULT_STATE.transactions;
-      // If user had manually added transactions in localStorage, merge them in
-      if (parsed.transactions && parsed.transactions.length > 0) {
-        parsed.transactions.forEach(t => { if (t.date) t.date = new Date(t.date); });
-        // Only add ones not already in embedded set
-        const embeddedIds = new Set(state.transactions.map(t => t.id));
-        const manual = parsed.transactions.filter(t => !embeddedIds.has(t.id));
-        if (manual.length > 0) state.transactions = [...state.transactions, ...manual];
-      }
+      parsed.transactions = parsed.transactions || [];
+      parsed.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
+      // Merge: localStorage transactions + DEFAULT_STATE transactions (unique by ID)
+      const byId = {};
+      DEFAULT_STATE.transactions.forEach(t => { byId[t.id] = t; });
+      parsed.transactions.forEach(t => { byId[t.id] = t; });
+      state = { ...DEFAULT_STATE, ...parsed, transactions: Object.values(byId) };
     } else {
-      state = { ...DEFAULT_STATE };
-      state.transactions = DEFAULT_STATE.transactions;
+      state = { ...DEFAULT_STATE, transactions: [...DEFAULT_STATE.transactions] };
     }
   } catch(e) {
-    state = { ...DEFAULT_STATE };
-    state.transactions = DEFAULT_STATE.transactions;
+    state = { ...DEFAULT_STATE, transactions: [...DEFAULT_STATE.transactions] };
   }
   state.recurringExpenses = state.recurringExpenses || [];
   state.recurringGenerated = state.recurringGenerated || {};
@@ -3124,8 +3164,33 @@ function loadState() {
   state.monthlyIncome = state.monthlyIncome || {};
   state.ignoredDupes = state.ignoredDupes || [];
   state.excludedCats = state.excludedCats || ['Transferencia'];
-  // Normalize all categories to match canonical list (fixes ALL-CAPS from old imports)
-  runCatNormalization();
+  if (typeof runCatNormalization === 'function') runCatNormalization();
+}
+
+async function loadStateFromSupabase() {
+  const session = (await sb.auth.getSession()).data.session;
+  if (!session) return false;
+  try {
+    const cloud = await supabasePull();
+    if (cloud && cloud.state && cloud.state.transactions && cloud.state.transactions.length > 0) {
+      const cloudState = rehydrateState(cloud.state);
+      // Merge: cloud + local + DEFAULT_STATE (cloud wins for same ID)
+      const byId = {};
+      DEFAULT_STATE.transactions.forEach(t => { byId[t.id] = t; });
+      state.transactions.forEach(t => { byId[t.id] = t; });
+      cloudState.transactions.forEach(t => { byId[t.id] = t; });
+      const { transactions: _ct, ...cloudConfig } = cloudState;
+      state = { ...state, ...cloudConfig, transactions: Object.values(byId) };
+      state.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
+      localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
+      localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
+      return true;
+    }
+    return false;
+  } catch(e) {
+    console.error('Supabase load failed:', e);
+    return false;
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -7510,8 +7575,35 @@ function init() {
 
 init();
 updateMobileNav('dashboard');
-// Auto-sync from cloud on page load
-setTimeout(() => cloudSyncFull(), 2000);
+// Auto-sync from Supabase on page load
+setTimeout(async () => {
+  const session = (await sb.auth.getSession()).data.session;
+  if (session) {
+    const hadCloudData = await loadStateFromSupabase();
+    if (hadCloudData) {
+      renderDashboard();
+      updateSidebarBalance();
+      if (state.transactions.length) showDashContent();
+    } else {
+      await supabasePush();
+    }
+    updateSyncIndicator('ok', 'Conectado');
+  } else {
+    updateSyncIndicator('idle', 'Sin cuenta');
+  }
+}, 1000);
+
+// Handle magic link redirect (Supabase auth callback)
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    const hadCloudData = await loadStateFromSupabase();
+    if (!hadCloudData) await supabasePush();
+    renderDashboard();
+    updateSidebarBalance();
+    if (state.transactions.length) showDashContent();
+    updateSyncIndicator('ok', 'Conectado');
+  }
+});
 
 // PWA: Register service worker
 if ('serviceWorker' in navigator) {
