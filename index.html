@@ -3057,14 +3057,12 @@ function showAuthModal() {
       <div class="modal" style="max-width:400px">
         <div class="modal-header"><h2>Iniciar sesión</h2></div>
         <div class="modal-body">
-          <p style="margin-bottom:12px;color:var(--text-secondary)">Ingresá tu email para recibir un link de acceso y sincronizar tus datos en la nube.</p>
+          <p style="margin-bottom:12px;color:var(--text-secondary)">Ingresá tu email y una contraseña para sincronizar tus datos en la nube.</p>
           <input type="email" id="auth-email" class="txn-input" placeholder="tu@email.com" value="luismarinoaguirree@gmail.com" style="width:100%;margin-bottom:12px">
-          <div id="auth-otp-section" style="display:none">
-            <p style="margin-bottom:8px;color:var(--text-secondary)">Ingresá el código de 6 dígitos que te enviamos:</p>
-            <input type="text" id="auth-otp" class="txn-input" placeholder="000000" maxlength="6" style="width:100%;text-align:center;font-size:1.5rem;letter-spacing:0.5em;margin-bottom:12px">
-          </div>
+          <input type="password" id="auth-pass" class="txn-input" placeholder="Contraseña" style="width:100%;margin-bottom:12px">
           <div id="auth-error" style="color:#ef4444;font-size:0.85rem;margin-bottom:8px;display:none"></div>
-          <button id="auth-submit-btn" class="btn btn-primary" onclick="handleAuth()" style="width:100%">Enviar código</button>
+          <button id="auth-submit-btn" class="btn btn-primary" onclick="handleAuth()" style="width:100%">Iniciar sesión</button>
+          <p id="auth-toggle" style="text-align:center;margin-top:8px;font-size:0.85rem;color:var(--text-secondary);cursor:pointer" onclick="toggleAuthMode()">¿Primera vez? <b>Crear cuenta</b></p>
         </div>
       </div>`;
     document.body.appendChild(modal);
@@ -3073,34 +3071,46 @@ function showAuthModal() {
   }
 }
 
+var _authIsSignUp = false;
+function toggleAuthMode() {
+  _authIsSignUp = !_authIsSignUp;
+  const btn = document.getElementById('auth-submit-btn');
+  const toggle = document.getElementById('auth-toggle');
+  if (_authIsSignUp) {
+    btn.textContent = 'Crear cuenta';
+    toggle.innerHTML = '¿Ya tenés cuenta? <b>Iniciar sesión</b>';
+  } else {
+    btn.textContent = 'Iniciar sesión';
+    toggle.innerHTML = '¿Primera vez? <b>Crear cuenta</b>';
+  }
+}
+
 async function handleAuth() {
   const btn = document.getElementById('auth-submit-btn');
   const errEl = document.getElementById('auth-error');
-  const otpSection = document.getElementById('auth-otp-section');
   errEl.style.display = 'none';
-
-  if (otpSection.style.display === 'none') {
-    const email = document.getElementById('auth-email').value.trim();
-    if (!email) { errEl.textContent = 'Ingresá tu email'; errEl.style.display = 'block'; return; }
-    btn.disabled = true; btn.textContent = 'Enviando…';
-    const { error } = await sb.auth.signInWithOtp({ email });
-    btn.disabled = false;
-    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; btn.textContent = 'Enviar código'; return; }
-    otpSection.style.display = 'block';
-    btn.textContent = 'Verificar código';
-    document.getElementById('auth-otp').focus();
-  } else {
-    const email = document.getElementById('auth-email').value.trim();
-    const token = document.getElementById('auth-otp').value.trim();
-    if (!token || token.length < 6) { errEl.textContent = 'Ingresá el código de 6 dígitos'; errEl.style.display = 'block'; return; }
-    btn.disabled = true; btn.textContent = 'Verificando…';
-    const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
-    btn.disabled = false;
-    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; btn.textContent = 'Verificar código'; return; }
-    document.getElementById('auth-modal').classList.remove('open');
-    showToast('Sesión iniciada correctamente', 'success');
-    await supabaseSyncFull();
+  const email = document.getElementById('auth-email').value.trim();
+  const pass = document.getElementById('auth-pass').value;
+  if (!email) { errEl.textContent = 'Ingresá tu email'; errEl.style.display = 'block'; return; }
+  if (!pass || pass.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; errEl.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = _authIsSignUp ? 'Creando…' : 'Ingresando…';
+  const { error } = _authIsSignUp
+    ? await sb.auth.signUp({ email, password: pass })
+    : await sb.auth.signInWithPassword({ email, password: pass });
+  btn.disabled = false;
+  if (error) {
+    if (error.message.includes('Invalid login') && !_authIsSignUp) {
+      errEl.textContent = 'Email o contraseña incorrectos. ¿Primera vez? Creá una cuenta.';
+    } else {
+      errEl.textContent = error.message;
+    }
+    errEl.style.display = 'block';
+    btn.textContent = _authIsSignUp ? 'Crear cuenta' : 'Iniciar sesión';
+    return;
   }
+  document.getElementById('auth-modal').classList.remove('open');
+  showToast('Sesión iniciada correctamente', 'success');
+  await supabaseSyncFull();
 }
 
 // Default config embedded from user's backup — used when no localStorage exists
