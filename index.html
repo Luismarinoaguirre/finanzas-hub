@@ -1482,8 +1482,54 @@ tr:hover td { background: var(--table-hover); }
       </div>
     </div>
 
+    <!-- USD / Divisas widget -->
+    <div class="fade-up d2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="glass-card" style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div class="chart-card-title" style="margin:0;">💵 Dólar MEP</div>
+          <div id="mep-updated" style="font-size:10px;color:var(--text-tertiary);"></div>
+        </div>
+        <div style="display:flex;gap:20px;align-items:baseline;">
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Compra</div>
+            <div id="mep-compra" style="font-size:28px;font-weight:800;letter-spacing:-1px;color:var(--green);">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Venta</div>
+            <div id="mep-venta" style="font-size:28px;font-weight:800;letter-spacing:-1px;color:var(--red);">—</div>
+          </div>
+          <div style="margin-left:auto;text-align:right;">
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">En app</div>
+            <div style="font-size:22px;font-weight:700;color:var(--blue);">$<span id="mep-app-rate">—</span></div>
+          </div>
+        </div>
+        <button class="btn btn-glass" onclick="openConversionModal()" style="margin-top:14px;font-size:11px;padding:6px 14px;width:100%;">💱 Registrar cambio USD → ARS</button>
+      </div>
+      <div class="glass-card" style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div class="chart-card-title" style="margin:0;">💰 Balance USD</div>
+          <button class="btn btn-glass" onclick="nav('settings')" style="font-size:10px;padding:4px 10px;">⚙ Config</button>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Sueldo USD</div>
+            <div id="usd-income" style="font-size:22px;font-weight:800;color:var(--green);">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Cambiado</div>
+            <div id="usd-converted" style="font-size:22px;font-weight:800;color:var(--red);">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Disponible</div>
+            <div id="usd-available" style="font-size:22px;font-weight:800;color:var(--blue);">—</div>
+          </div>
+        </div>
+        <div id="usd-conversions-list" style="margin-top:14px;max-height:120px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
     <!-- Charts row -->
-    <div class="charts-row fade-up d2">
+    <div class="charts-row fade-up d3">
       <div class="glass-card chart-card">
         <div class="chart-header">
           <div>
@@ -2356,8 +2402,9 @@ tr:hover td { background: var(--table-hover); }
     <div class="glass-card" style="padding:24px;">
       <div class="chart-card-title" style="margin-bottom:16px;">Parámetros</div>
       <div class="input-group" style="margin-bottom:14px;">
-        <div class="input-label">Tipo de cambio USD → ARS</div>
+        <div class="input-label">Tipo de cambio USD → ARS <span id="cfg-rate-auto" style="font-size:10px;color:var(--green);font-weight:600;"></span></div>
         <input type="number" class="input-field" id="cfg-usd-rate" placeholder="ej: 1380" oninput="saveConfig()">
+        <div style="font-size:10px;color:var(--text-tertiary);margin-top:4px;">Se actualiza automáticamente con el dólar MEP al abrir la app</div>
       </div>
       <div class="input-group" style="margin-bottom:14px;">
         <div class="input-label">Alerta de gasto (% del ingreso)</div>
@@ -2767,6 +2814,41 @@ tr:hover td { background: var(--table-hover); }
 <input type="file" id="jsonInput" accept=".json" style="display:none" onchange="handleJSONImport(event)">
 
 <!-- ═══ IMPORT REVIEW MODAL ═══ -->
+<!-- Conversion USD → ARS -->
+<div class="modal-overlay" id="modal-conversion">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-title">💱 Registrar cambio USD → ARS</div>
+    <div class="modal-sub">Registrá una venta de dólares (ej: Cocos Capital)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;">
+      <div class="input-group">
+        <div class="input-label">Fecha</div>
+        <input type="date" class="input-field" id="conv-date">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Monto USD</div>
+        <input type="number" class="input-field" id="conv-usd" placeholder="ej: 500" oninput="calcConvARS()">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Tipo de cambio</div>
+        <input type="number" class="input-field" id="conv-rate" placeholder="ej: 1530" step="0.01" oninput="calcConvARS()">
+      </div>
+      <div class="input-group">
+        <div class="input-label">ARS recibidos</div>
+        <input type="number" class="input-field" id="conv-ars" placeholder="calculado" style="background:var(--bg-mid);" readonly>
+      </div>
+    </div>
+    <div class="input-group" style="margin-top:12px;">
+      <div class="input-label">Notas (opcional)</div>
+      <input type="text" class="input-field" id="conv-notes" placeholder="ej: Cocos Capital, Brubank → Galicia">
+    </div>
+    <div id="conv-rate-hint" style="font-size:11px;color:var(--text-tertiary);margin-top:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-glass" onclick="closeModal('modal-conversion')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveConversion()">💱 Registrar cambio</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-import">
   <div class="modal" style="width:720px;max-width:96vw;">
 
@@ -2918,6 +3000,8 @@ let state = {
   inversiones: [],
   income: { ars: 0, arsVar: 0, usd: 0, usdVar: 0 },
   usdRate: 1380,
+  usdRateHistory: {},
+  conversions: [],
   alertPct: 85,
   categories: [...DEFAULT_CATS],
   notes: {},
@@ -5305,6 +5389,150 @@ function setDashMonth(val) {
   renderDashboard();
 }
 
+// ═══════════════════════════════════════════════
+//  USD / DIVISAS
+// ═══════════════════════════════════════════════
+let _mepData = null;
+
+async function fetchMEPRate() {
+  try {
+    const res = await fetch('https://dolarapi.com/v1/dolares/bolsa');
+    if (!res.ok) throw new Error('dolarapi failed');
+    _mepData = await res.json();
+  } catch {
+    try {
+      const res2 = await fetch('https://dolarapi.com/v1/dolares/contadoconliqui');
+      if (res2.ok) _mepData = await res2.json();
+    } catch { /* silently fail */ }
+  }
+  if (_mepData) {
+    state.usdRate = _mepData.venta;
+    const today = new Date().toISOString().split('T')[0];
+    if (!state.usdRateHistory) state.usdRateHistory = {};
+    state.usdRateHistory[today] = { compra: _mepData.compra, venta: _mepData.venta };
+    saveState();
+  }
+  renderMEPWidget();
+}
+
+function renderMEPWidget() {
+  const compraEl = document.getElementById('mep-compra');
+  const ventaEl = document.getElementById('mep-venta');
+  const appRateEl = document.getElementById('mep-app-rate');
+  const updatedEl = document.getElementById('mep-updated');
+  if (!compraEl) return;
+
+  if (_mepData) {
+    compraEl.textContent = '$' + fmtN(_mepData.compra);
+    ventaEl.textContent = '$' + fmtN(_mepData.venta);
+    const fecha = new Date(_mepData.fechaActualizacion);
+    updatedEl.textContent = fecha.toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}) + ' hs';
+  } else {
+    compraEl.textContent = '—';
+    ventaEl.textContent = '—';
+    updatedEl.textContent = 'sin conexión';
+  }
+  appRateEl.textContent = fmtN(state.usdRate);
+}
+
+function getRateForDate(dateStr) {
+  const d = dateStr.split('T')[0];
+  const hist = state.usdRateHistory || {};
+  if (hist[d]) return hist[d].compra;
+  const dates = Object.keys(hist).sort();
+  let closest = null, minDiff = Infinity;
+  for (const dk of dates) {
+    const diff = Math.abs(new Date(d) - new Date(dk));
+    if (diff < minDiff) { minDiff = diff; closest = dk; }
+  }
+  return closest ? hist[closest].compra : state.usdRate;
+}
+
+function renderUSDBalance() {
+  const incomeEl = document.getElementById('usd-income');
+  const convertedEl = document.getElementById('usd-converted');
+  const availableEl = document.getElementById('usd-available');
+  const listEl = document.getElementById('usd-conversions-list');
+  if (!incomeEl) return;
+
+  const mk = state.dashMonth || (new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0'));
+  const inc = getMonthIncome(mk);
+  const salaryUSD = (inc.usd || 0) + (inc.usdVar || 0);
+
+  const convs = (state.conversions || []).filter(c => c.date && c.date.startsWith(mk));
+  const totalConverted = convs.reduce((s,c) => s + (c.usd || 0), 0);
+  const available = salaryUSD - totalConverted;
+
+  incomeEl.textContent = 'U$D ' + fmtN(salaryUSD);
+  convertedEl.textContent = 'U$D ' + fmtN(totalConverted);
+  availableEl.textContent = 'U$D ' + fmtN(available);
+  availableEl.style.color = available >= 0 ? 'var(--blue)' : 'var(--red)';
+
+  if (!convs.length) {
+    listEl.innerHTML = '<div style="font-size:11px;color:var(--text-tertiary);padding:8px 0;">Sin cambios este mes</div>';
+    return;
+  }
+  listEl.innerHTML = convs.sort((a,b) => new Date(b.date)-new Date(a.date)).map(c => {
+    const d = new Date(c.date);
+    const ds = d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--glass-border);font-size:12px;">
+      <span style="color:var(--text-secondary);">${ds}</span>
+      <span style="font-weight:600;color:var(--red);">-U$D ${fmtN(c.usd)}</span>
+      <span style="color:var(--text-tertiary);">@ $${fmtN(c.rate)}</span>
+      <span style="font-weight:600;color:var(--green);">+$${fmtN(c.ars)}</span>
+      <button onclick="deleteConversion('${c.id}')" style="border:none;background:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px;" title="Eliminar">×</button>
+    </div>`;
+  }).join('');
+}
+
+function openConversionModal() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('conv-date').value = today;
+  document.getElementById('conv-usd').value = '';
+  document.getElementById('conv-ars').value = '';
+  document.getElementById('conv-notes').value = '';
+  const rate = _mepData ? _mepData.compra : state.usdRate;
+  document.getElementById('conv-rate').value = rate;
+  document.getElementById('conv-rate-hint').textContent = _mepData
+    ? 'MEP compra actual: $' + fmtN(_mepData.compra) + ' · Editá si Cocos te dio otro precio'
+    : 'Ingresá el tipo de cambio al que vendiste';
+  openModal('modal-conversion');
+}
+
+function calcConvARS() {
+  const usd = parseFloat(document.getElementById('conv-usd').value) || 0;
+  const rate = parseFloat(document.getElementById('conv-rate').value) || 0;
+  document.getElementById('conv-ars').value = usd && rate ? Math.round(usd * rate) : '';
+}
+
+function saveConversion() {
+  const date = document.getElementById('conv-date').value;
+  const usd = parseFloat(document.getElementById('conv-usd').value);
+  const rate = parseFloat(document.getElementById('conv-rate').value);
+  const notes = document.getElementById('conv-notes').value.trim();
+  if (!date || !usd || !rate) { showToast('Completá fecha, monto y tipo de cambio', 'error'); return; }
+  const ars = Math.round(usd * rate);
+  if (!state.conversions) state.conversions = [];
+  state.conversions.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    date, usd, rate, ars, notes
+  });
+  if (!state.usdRateHistory) state.usdRateHistory = {};
+  state.usdRateHistory[date] = state.usdRateHistory[date] || { compra: rate, venta: rate };
+  saveState();
+  closeModal('modal-conversion');
+  renderUSDBalance();
+  showToast(`Cambio registrado: U$D ${fmtN(usd)} → $${fmtN(ars)}`, 'success');
+}
+
+function deleteConversion(id) {
+  if (!state.conversions) return;
+  state.conversions = state.conversions.filter(c => c.id !== id);
+  saveState();
+  renderUSDBalance();
+  showToast('Cambio eliminado');
+}
+
 function renderDashboard() {
   updateMonthPicker();
   if (!state.transactions.length) return;
@@ -5402,6 +5630,8 @@ function renderDashboard() {
   checkBudgetAlerts(monthTxns);
   renderTop5(monthTxns);
   renderDashCuotas();
+  renderMEPWidget();
+  renderUSDBalance();
   updateSidebarBalance();
 }
 
@@ -6978,6 +7208,8 @@ function renderSettings() {
   document.getElementById('cfg-income-usd').value = state.income.usd||'';
   document.getElementById('cfg-income-usd-var').value = state.income.usdVar||'';
   document.getElementById('cfg-usd-rate').value = state.usdRate||1380;
+  const autoEl = document.getElementById('cfg-rate-auto');
+  if (autoEl && _mepData) autoEl.textContent = '✓ Auto MEP';
   document.getElementById('cfg-alert-pct').value = state.alertPct||85;
   document.getElementById('cfg-gsheets-url').value = state.gsheetsUrl||'';
 
@@ -7601,6 +7833,9 @@ sb.auth.onAuthStateChange(async (event, session) => {
     updateSyncIndicator('ok', 'Conectado');
   }
 });
+
+// Fetch MEP rate on app load
+fetchMEPRate();
 
 // PWA: Register service worker
 if ('serviceWorker' in navigator) {
