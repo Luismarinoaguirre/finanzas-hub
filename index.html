@@ -5457,7 +5457,7 @@ function renderUSDBalance() {
 
   const mk = state.dashMonth || (new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0'));
   const inc = getMonthIncome(mk);
-  const salaryUSD = (inc.usd || 0) + (inc.usdVar || 0);
+  const salaryUSD = mk >= '2025-07' ? (inc.usd || 0) + (inc.usdVar || 0) : 0;
 
   const convs = (state.conversions || []).filter(c => c.date && c.date.startsWith(mk));
   const totalConverted = convs.reduce((s,c) => s + (c.usd || 0), 0);
