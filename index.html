@@ -1884,11 +1884,11 @@ tr:hover td { background: var(--table-hover); }
   </div>
 
   <!-- Quick presets -->
-  <div class="fade-up d1" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-    <button class="btn btn-glass" onclick="applyReportPreset('liquidacion')" style="font-size:12px;border-color:var(--blue);color:var(--blue);">÷ Liquidación gastos compartidos</button>
-    <button class="btn btn-glass" onclick="applyReportPreset('mes')" style="font-size:12px;">📅 Este mes</button>
-    <button class="btn btn-glass" onclick="applyReportPreset('trimestre')" style="font-size:12px;">📅 Último trimestre</button>
-    <button class="btn btn-glass" onclick="applyReportPreset('pendientes')" style="font-size:12px;border-color:var(--red);color:var(--red);">🔴 Pendientes de cobro</button>
+  <div class="fade-up d1" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <button class="btn btn-glass" onclick="applyReportPreset('liquidacion')" style="font-size:12px;padding:8px 16px;border-color:var(--blue);color:var(--blue);font-weight:600;">÷ Gastos compartidos</button>
+    <button class="btn btn-glass" onclick="applyReportPreset('mes')" style="font-size:12px;padding:8px 16px;">Este mes</button>
+    <button class="btn btn-glass" onclick="applyReportPreset('trimestre')" style="font-size:12px;padding:8px 16px;">Último trimestre</button>
+    <button class="btn btn-glass" onclick="applyReportPreset('pendientes')" style="font-size:12px;padding:8px 16px;border-color:var(--red);color:var(--red);font-weight:600;">Pendientes de cobro</button>
   </div>
 
   <!-- Filters -->
@@ -1965,51 +1965,49 @@ tr:hover td { background: var(--table-hover); }
   <!-- Report results -->
   <div id="report-results" class="fade-up d3" style="display:none;">
     <!-- KPIs -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px;">
-      <div class="glass-card" style="padding:20px;">
-        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Total</div>
-        <div id="report-kpi-total" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+      <div class="glass-card" style="padding:18px 20px;border-left:3px solid var(--red);">
+        <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Total</div>
+        <div id="report-kpi-total" style="font-size:24px;font-weight:800;margin-top:4px;letter-spacing:-0.5px;">$0</div>
       </div>
-      <div class="glass-card" style="padding:20px;">
-        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Movimientos</div>
-        <div id="report-kpi-count" style="font-size:28px;font-weight:700;margin-top:6px;">0</div>
+      <div class="glass-card" style="padding:18px 20px;border-left:3px solid var(--blue);">
+        <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Movimientos</div>
+        <div id="report-kpi-count" style="font-size:24px;font-weight:800;margin-top:4px;">0</div>
       </div>
-      <div class="glass-card" style="padding:20px;">
-        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Promedio</div>
-        <div id="report-kpi-avg" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+      <div class="glass-card" style="padding:18px 20px;border-left:3px solid var(--orange);">
+        <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Promedio</div>
+        <div id="report-kpi-avg" style="font-size:24px;font-weight:800;margin-top:4px;letter-spacing:-0.5px;">$0</div>
       </div>
-      <div class="glass-card" style="padding:20px;">
-        <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;">Mayor gasto</div>
-        <div id="report-kpi-max" style="font-size:28px;font-weight:700;margin-top:6px;">$0</div>
+      <div class="glass-card" style="padding:18px 20px;border-left:3px solid var(--green);">
+        <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Mayor gasto</div>
+        <div id="report-kpi-max" style="font-size:24px;font-weight:800;margin-top:4px;letter-spacing:-0.5px;">$0</div>
       </div>
     </div>
 
     <!-- Shared expense summary — only visible when report has shared txns -->
-    <div id="report-shared-summary" style="display:none;background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.2);border-radius:var(--r);padding:16px 20px;margin-bottom:20px;">
-      <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">÷ Resumen de gastos compartidos</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
-        <div>
-          <div style="font-size:11px;color:var(--text-tertiary);">Total gastado</div>
-          <div id="rss-total" style="font-size:20px;font-weight:700;margin-top:2px;">$0</div>
-          <div id="rss-total-sub" style="font-size:10px;color:var(--text-tertiary);margin-top:1px;"></div>
+    <div id="report-shared-summary" style="display:none;background:linear-gradient(135deg,rgba(59,130,246,0.06),rgba(59,130,246,0.02));border:1px solid rgba(59,130,246,0.15);border-radius:16px;padding:20px 24px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+        <span style="font-size:18px;">÷</span>
+        <span style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:1px;">Resumen para compartir</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;">
+        <div style="padding:12px 16px;background:var(--glass);border-radius:12px;border:1px solid var(--glass-border);">
+          <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Total gastado</div>
+          <div id="rss-total" style="font-size:22px;font-weight:800;margin-top:4px;">$0</div>
+          <div id="rss-total-sub" style="font-size:10px;color:var(--text-tertiary);margin-top:2px;"></div>
         </div>
-        <div>
-          <div style="font-size:11px;color:var(--text-tertiary);">Tu parte</div>
-          <div id="rss-mypart" style="font-size:20px;font-weight:700;color:var(--blue);margin-top:2px;">$0</div>
-          <div id="rss-mypart-sub" style="font-size:10px;color:var(--text-tertiary);margin-top:1px;"></div>
+        <div style="padding:12px 16px;background:rgba(248,113,113,0.06);border-radius:12px;border:1px solid rgba(248,113,113,0.15);">
+          <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Te deben</div>
+          <div id="rss-owed" style="font-size:22px;font-weight:800;color:var(--red);margin-top:4px;">$0</div>
+          <div id="rss-owed-sub" style="font-size:10px;color:var(--text-tertiary);margin-top:2px;"></div>
         </div>
-        <div>
-          <div style="font-size:11px;color:var(--text-tertiary);">Te deben</div>
-          <div id="rss-owed" style="font-size:20px;font-weight:700;color:var(--red);margin-top:2px;">$0</div>
-          <div id="rss-owed-sub" style="font-size:10px;color:var(--text-tertiary);margin-top:1px;"></div>
+        <div style="padding:12px 16px;background:rgba(52,211,153,0.06);border-radius:12px;border:1px solid rgba(52,211,153,0.15);">
+          <div style="font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Ya cobrado</div>
+          <div id="rss-received" style="font-size:22px;font-weight:800;color:var(--green);margin-top:4px;">$0</div>
         </div>
-        <div>
-          <div style="font-size:11px;color:var(--text-tertiary);">Ya cobrado</div>
-          <div id="rss-received" style="font-size:20px;font-weight:700;color:var(--green);margin-top:2px;">$0</div>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text-tertiary);font-weight:600;">Saldo pendiente</div>
-          <div id="rss-pending" style="font-size:20px;font-weight:800;margin-top:2px;">$0</div>
+        <div style="padding:12px 16px;background:var(--glass);border-radius:12px;border:2px solid var(--glass-border);">
+          <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">Saldo pendiente</div>
+          <div id="rss-pending" style="font-size:22px;font-weight:800;margin-top:4px;">$0</div>
         </div>
       </div>
     </div>
@@ -2028,15 +2026,18 @@ tr:hover td { background: var(--table-hover); }
 
     <!-- Export + Table -->
     <div class="glass-card" style="padding:20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <div class="chart-card-title">Detalle de movimientos</div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <span id="report-sel-label" style="font-size:12px;color:var(--text-tertiary);"></span>
-          <button class="btn btn-glass" onclick="toggleSelectAllReport()" id="btn-report-selall" style="font-size:12px;padding:6px 12px;">Deseleccionar todo</button>
-          <button class="btn btn-glass" onclick="openAddToReport()" style="font-size:12px;padding:6px 12px;">＋ Agregar</button>
-          <button class="btn btn-glass" onclick="copyReportWhatsApp()" style="font-size:12px;padding:6px 14px;" title="Copiar resumen para WhatsApp">📋 WhatsApp</button>
-          <button class="btn btn-glass" onclick="exportReport()" style="font-size:12px;padding:6px 14px;">↓ CSV</button>
-          <button class="btn btn-primary" onclick="exportReportPDF()" style="font-size:12px;padding:6px 14px;">📄 PDF</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="chart-card-title" style="margin:0;">Detalle</div>
+          <span id="report-sel-label" style="font-size:11px;color:var(--text-tertiary);background:var(--glass);padding:3px 10px;border-radius:20px;"></span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-glass" onclick="toggleSelectAllReport()" id="btn-report-selall" style="font-size:11px;padding:6px 12px;">Deseleccionar todo</button>
+          <button class="btn btn-glass" onclick="openAddToReport()" style="font-size:11px;padding:6px 12px;">＋ Agregar</button>
+          <div style="width:1px;height:20px;background:var(--glass-border);"></div>
+          <button class="btn btn-glass" onclick="copyReportWhatsApp()" style="font-size:11px;padding:6px 14px;" title="Copiar resumen para WhatsApp">📋 WhatsApp</button>
+          <button class="btn btn-glass" onclick="exportReport()" style="font-size:11px;padding:6px 14px;">↓ CSV</button>
+          <button class="btn btn-primary" onclick="exportReportPDF()" style="font-size:11px;padding:6px 14px;">📄 PDF</button>
         </div>
       </div>
       <div id="report-table" style="max-height:500px;overflow-y:auto;"></div>
@@ -6530,17 +6531,14 @@ function updateReportKPIs() {
   summaryEl.style.display = '';
 
   const totalOriginal = sharedTxns.reduce((s,t) => s + (t.originalAmount || Math.round(t.amount * t.sharedPeople)), 0);
-  const myPart = sharedTxns.reduce((s,t) => s + t.amount, 0);
   const totalOwed = sharedTxns.reduce((s,t) => s + getSharedOwed(t), 0);
   const totalReceived = sharedTxns.reduce((s,t) => s + getSharedReceived(t), 0);
   const pending = Math.max(0, totalOwed - totalReceived);
 
   document.getElementById('rss-total').textContent = '$' + fmtN(totalOriginal);
   document.getElementById('rss-total-sub').textContent = sharedTxns.length + ' gasto' + (sharedTxns.length !== 1 ? 's' : '') + ' compartido' + (sharedTxns.length !== 1 ? 's' : '');
-  document.getElementById('rss-mypart').textContent = '$' + fmtN(myPart);
-  document.getElementById('rss-mypart-sub').textContent = 'de $' + fmtN(totalOriginal) + ' total';
   document.getElementById('rss-owed').textContent = '$' + fmtN(totalOwed);
-  document.getElementById('rss-owed-sub').textContent = 'lo que pagaste por otros';
+  document.getElementById('rss-owed-sub').textContent = sharedTxns.length + ' gastos divididos';
   document.getElementById('rss-received').textContent = '$' + fmtN(totalReceived);
   const pendingEl = document.getElementById('rss-pending');
   pendingEl.textContent = '$' + fmtN(pending);
@@ -6589,8 +6587,8 @@ function renderReportTable() {
     '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:600;font-size:11px;">Descripción</th>' +
     '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:600;font-size:11px;">Categoría</th>' +
     '<th style="text-align:left;padding:8px 4px;color:var(--text-secondary);font-weight:600;font-size:11px;">Banco</th>' +
-    (hasShared ? '<th style="text-align:right;padding:8px 4px;color:var(--blue);font-weight:600;font-size:11px;">Tu parte</th>' : '') +
     '<th style="text-align:right;padding:8px 4px;color:var(--text-secondary);font-weight:600;font-size:11px;">Total</th>' +
+    (hasShared ? '<th style="text-align:right;padding:8px 4px;color:var(--red);font-weight:600;font-size:11px;">Te deben</th>' : '') +
     '<th style="text-align:center;padding:8px 4px;color:var(--text-secondary);font-weight:600;font-size:11px;width:60px;">Estado</th>' +
     '</tr></thead><tbody>' +
     sorted.map(t => {
@@ -6604,20 +6602,18 @@ function renderReportTable() {
       const statusPill = sharedStatus
         ? `<span style="font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:${sharedStatus==='complete'?'rgba(52,211,153,.15)':sharedStatus==='partial'?'rgba(251,146,60,.15)':'rgba(248,113,113,.15)'};color:${sharedStatus==='complete'?'var(--green)':sharedStatus==='partial'?'var(--orange)':'var(--red)'};">${sharedStatus==='complete'?'✅ Cobrado':sharedStatus==='partial'?'🟡 Parcial':'🔴 Pendiente'}</span>`
         : (isIn ? '<span style="font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(52,211,153,.15);color:var(--green);">Cobrado</span>' : '');
-      const sharedPartCell = hasShared
-        ? `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--blue);">${isShared ? fmtM(t.amount,t.currency) : '<span style="color:var(--text-tertiary);font-size:11px;">—</span>'}</td>`
+      const totalCell = `<td style="padding:8px 4px;text-align:right;font-weight:600;color:${isIn?'var(--green)':'inherit'};">${isIn?'+':''}${fmtM(isShared ? origTotal : t.amount, t.currency)}${isShared ? '<br><span style="font-size:10px;color:var(--text-tertiary);">÷' + t.sharedPeople + ' pers.</span>' : ''}</td>`;
+      const owedCell = hasShared
+        ? `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--red);">${isShared ? fmtM(origTotal - t.amount, t.currency) : '<span style="color:var(--text-tertiary);font-size:11px;">—</span>'}</td>`
         : '';
-      const totalCell = isShared
-        ? `<td style="padding:8px 4px;text-align:right;"><span style="font-weight:600;">${fmtM(origTotal,t.currency)}</span><br><span style="font-size:10px;color:var(--text-tertiary);">÷${t.sharedPeople} pers.</span></td>`
-        : `<td style="padding:8px 4px;text-align:right;font-weight:600;color:${isIn?'var(--green)':'inherit'};">${isIn?'+':''}${fmtM(t.amount,t.currency)}</td>`;
       return `<tr style="border-bottom:1px solid var(--table-border);${rowStyle}${isShared?'background:rgba(59,130,246,0.02);':''}" id="rrow-${t.id}">
         <td style="padding:6px 4px;text-align:center;"><input type="checkbox" ${checked} onchange="toggleReportTxn('${t.id}')" style="width:14px;height:14px;cursor:pointer;accent-color:var(--blue);"></td>
         <td style="padding:8px 4px;white-space:nowrap;font-size:12px;color:var(--text-secondary);">${d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td>
         <td style="padding:8px 4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.description)}</td>
         <td style="padding:8px 4px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${catColor(t.category)};margin-right:5px;vertical-align:middle;"></span><span style="font-size:12px;">${esc(t.category||'Otros')}</span></td>
         <td style="padding:8px 4px;color:var(--text-secondary);font-size:11px;">${esc(t.bank||'—')}</td>
-        ${sharedPartCell}
         ${totalCell}
+        ${owedCell}
         <td style="padding:8px 4px;text-align:center;">${statusPill}</td>
       </tr>`;
     }).join('') +
@@ -6707,22 +6703,19 @@ function copyReportWhatsApp() {
     const received = sharedTxns.reduce((s,t) => s + getSharedReceived(t), 0);
     const pending = Math.max(0, totalOwed - received);
 
-    lines.push(`📊 *Liquidación de gastos compartidos*`);
+    lines.push(`📊 *Gastos compartidos*`);
     lines.push(`📅 ${period}`);
     lines.push('');
     sharedTxns.sort((a,b) => new Date(a.date)-new Date(b.date)).forEach(t => {
       const orig = t.originalAmount || Math.round(t.amount * t.sharedPeople);
-      const st = getSharedStatus(t);
-      const stIcon = st === 'complete' ? '✅' : st === 'partial' ? '🟡' : '🔴';
-      lines.push(`${stIcon} ${fmt(t.date)} · ${t.description}`);
-      lines.push(`   Total: $${fmtN(orig)} ÷${t.sharedPeople} → *tu parte: $${fmtN(t.amount)}*`);
+      const owed = orig - t.amount;
+      lines.push(`• ${fmt(t.date)} · ${t.description}`);
+      lines.push(`   Total: *$${fmtN(orig)}* → te corresponde: *$${fmtN(owed)}*`);
     });
     lines.push('');
     lines.push('─────────────────────');
-    lines.push(`🧾 Total gastado: $${fmtN(totalOriginal)}`);
-    lines.push(`👤 Tu parte: $${fmtN(myPart)}`);
-    if (received > 0) lines.push(`✅ Ya cobrado: $${fmtN(received)}`);
-    lines.push(`${pending > 0 ? '🔴' : '✅'} *Saldo pendiente: $${fmtN(pending)}*`);
+    lines.push(`🧾 Total gastado: *$${fmtN(totalOriginal)}*`);
+    lines.push(`💰 *Total a transferir: $${fmtN(pending)}*`);
   } else {
     const total = active.reduce((s,t)=>s+t.amount,0);
     lines.push(`📊 *Reporte de gastos*`);
@@ -6802,7 +6795,7 @@ function exportReportPDF() {
   .kpi.orange .value { color: #d97706; }
   .summary-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 18px 20px; margin-bottom: 24px; }
   .summary-box h2 { font-size: 13px; font-weight: 700; color: #1d4ed8; margin-bottom: 14px; text-transform: uppercase; letter-spacing: .5px; }
-  .summary-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
   .sum-item .sum-label { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
   .sum-item .sum-val { font-size: 18px; font-weight: 800; margin-top: 3px; }
   .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; margin-bottom: 10px; }
@@ -6831,7 +6824,6 @@ function exportReportPDF() {
   if (isLiquidacion) {
     // ── LIQUIDACIÓN MODE ──────────────────────────────────────────
     const totalOrig   = sharedTxns.reduce((s,t) => s + (t.originalAmount || Math.round(t.amount*t.sharedPeople)), 0);
-    const myPart      = sharedTxns.reduce((s,t) => s + t.amount, 0);
     const totalOwed   = sharedTxns.reduce((s,t) => s + getSharedOwed(t), 0);
     const totalRec    = sharedTxns.reduce((s,t) => s + getSharedReceived(t), 0);
     const pending     = Math.max(0, totalOwed - totalRec);
@@ -6844,15 +6836,13 @@ function exportReportPDF() {
       const st = getSharedStatus(t);
       const stCls = st==='complete'?'st-complete':st==='partial'?'st-partial':'st-pending';
       const stLbl = st==='complete'?'✅ Cobrado':st==='partial'?'🟡 Parcial':'🔴 Pendiente';
-      const rec = getSharedReceived(t);
-      const pend = Math.max(0, getSharedOwed(t) - rec);
+      const owed = orig - t.amount;
       return `<tr class="shared-row">
         <td>${ds(t)}</td>
         <td><strong>${esc(t.description)}</strong><br><span style="font-size:10px;color:#64748b;">${esc(t.category||'Otros')} · ${esc(t.bank||'')}</span></td>
         <td style="text-align:right;">$${fmtN(orig)}</td>
-        <td style="text-align:center;">${t.sharedPeople}</td>
-        <td style="text-align:right;font-weight:700;color:#1d4ed8;">$${fmtN(t.amount)}</td>
-        <td style="text-align:right;color:${pend>0?'#dc2626':'#16a34a'};">${pend>0?'$'+fmtN(pend):'—'}</td>
+        <td style="text-align:center;">÷${t.sharedPeople}</td>
+        <td style="text-align:right;font-weight:700;color:#dc2626;">$${fmtN(owed)}</td>
         <td style="text-align:center;"><span class="st-pill ${stCls}">${stLbl}</span></td>
       </tr>`;
     }).join('');
@@ -6873,9 +6863,8 @@ function exportReportPDF() {
   <h2>Resumen</h2>
   <div class="summary-grid">
     <div class="sum-item"><div class="sum-label">Total gastado</div><div class="sum-val">$${fmtN(totalOrig)}</div></div>
-    <div class="sum-item"><div class="sum-label">Tu parte</div><div class="sum-val" style="color:#1d4ed8;">$${fmtN(myPart)}</div></div>
-    <div class="sum-item"><div class="sum-label">Ya cobrado</div><div class="sum-val" style="color:#16a34a;">$${fmtN(totalRec)}</div></div>
-    <div class="sum-item"><div class="sum-label">Saldo pendiente</div><div class="sum-val" style="color:${pending>0?'#dc2626':'#16a34a'};">$${fmtN(pending)}</div></div>
+    <div class="sum-item"><div class="sum-label">Te deben</div><div class="sum-val" style="color:#dc2626;">$${fmtN(totalOwed)}</div></div>
+    <div class="sum-item"><div class="sum-label">A transferir</div><div class="sum-val" style="color:${pending>0?'#dc2626':'#16a34a'};">$${fmtN(pending)}</div></div>
   </div>
 </div>
 
@@ -6891,9 +6880,8 @@ function exportReportPDF() {
     <th style="width:64px;">Fecha</th>
     <th>Concepto</th>
     <th style="text-align:right;width:90px;">Total</th>
-    <th style="text-align:center;width:50px;">Pers.</th>
-    <th style="text-align:right;width:90px;">Tu parte</th>
-    <th style="text-align:right;width:90px;">Pendiente</th>
+    <th style="text-align:center;width:50px;">Div.</th>
+    <th style="text-align:right;width:90px;">Te deben</th>
     <th style="text-align:center;width:80px;">Estado</th>
   </tr></thead>
   <tbody>${rows}
@@ -6901,14 +6889,13 @@ function exportReportPDF() {
     <td colspan="2">TOTAL</td>
     <td style="text-align:right;">$${fmtN(totalOrig)}</td>
     <td></td>
-    <td style="text-align:right;color:#1d4ed8;">$${fmtN(myPart)}</td>
-    <td style="text-align:right;color:${pending>0?'#dc2626':'#16a34a'};">$${fmtN(pending)}</td>
+    <td style="text-align:right;color:#dc2626;font-size:14px;">$${fmtN(totalOwed)}</td>
     <td></td>
   </tr></tbody>
 </table>
 <div class="footer">
-  <span>Finanzas Hub — liquidación de gastos compartidos</span>
-  <span>${sharedTxns.length} gastos · te deben $${fmtN(totalOwed)} · cobrado $${fmtN(totalRec)}</span>
+  <span>Finanzas Hub — gastos compartidos</span>
+  <span>${sharedTxns.length} gastos · total $${fmtN(totalOrig)} · a transferir $${fmtN(pending)}</span>
 </div>`;
 
   } else {
