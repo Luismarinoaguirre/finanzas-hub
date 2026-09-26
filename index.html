@@ -3128,8 +3128,10 @@ async function supabaseSyncFull() {
         state.transactions = Object.values(mergedById);
         state.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
       }
-      const { transactions: _ct, ...cloudConfig } = cloudState;
-      state = { ...state, ...cloudConfig, transactions: state.transactions };
+      const localCats = state.categories || [];
+      const { transactions: _ct, categories: cloudCats, ...cloudConfig } = cloudState;
+      const mergedCats = [...new Set([...localCats, ...(cloudCats || [])])];
+      state = { ...state, ...cloudConfig, transactions: state.transactions, categories: mergedCats };
     }
     localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
     localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
@@ -3290,8 +3292,10 @@ async function loadStateFromSupabase() {
       DEFAULT_STATE.transactions.forEach(t => { byId[t.id] = t; });
       state.transactions.forEach(t => { byId[t.id] = t; });
       cloudState.transactions.forEach(t => { byId[t.id] = t; });
-      const { transactions: _ct, ...cloudConfig } = cloudState;
-      state = { ...state, ...cloudConfig, transactions: Object.values(byId) };
+      const localCats = state.categories || [];
+      const { transactions: _ct, categories: cloudCats, ...cloudConfig } = cloudState;
+      const mergedCats = [...new Set([...localCats, ...(cloudCats || [])])];
+      state = { ...state, ...cloudConfig, transactions: Object.values(byId), categories: mergedCats };
       state.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
       localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
       localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
