@@ -3064,27 +3064,43 @@ function rehydrateState(s) {
   return s;
 }
 
+function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout: el servidor no responde')), ms))]);
+}
+
 async function supabasePush() {
   const session = (await sb.auth.getSession()).data.session;
   if (!session) return;
   updateSyncIndicator('syncing', 'Guardando…');
-  const payload = { user_id: session.user.id, state: serializeState(), updated_at: new Date().toISOString() };
-  const { error } = await sb.from('app_state').upsert(payload, { onConflict: 'user_id' });
-  if (error) {
-    console.error('Supabase push failed:', error);
-    updateSyncIndicator('error', 'Error');
-    showToast('Error guardando en la nube: ' + error.message, 'error');
-  } else {
-    updateSyncIndicator('ok', 'Guardado');
+  try {
+    const payload = { user_id: session.user.id, state: serializeState(), updated_at: new Date().toISOString() };
+    const { error } = await withTimeout(sb.from('app_state').upsert(payload, { onConflict: 'user_id' }), 15000);
+    if (error) {
+      console.error('Supabase push failed:', error);
+      updateSyncIndicator('error', 'Error');
+      showToast('Error guardando en la nube: ' + error.message, 'error');
+    } else {
+      updateSyncIndicator('ok', 'Guardado');
+    }
+  } catch(e) {
+    console.error('Supabase push timeout:', e);
+    updateSyncIndicator('error', 'Sin conexión');
+    showToast('No se pudo conectar con la nube. Verificá que Supabase esté activo.', 'error');
   }
 }
 
 async function supabasePull() {
   const session = (await sb.auth.getSession()).data.session;
   if (!session) return null;
-  const { data, error } = await sb.from('app_state').select('state, updated_at').eq('user_id', session.user.id).single();
-  if (error && error.code !== 'PGRST116') { console.error('Supabase pull failed:', error); return null; }
-  return data || null;
+  try {
+    const { data, error } = await withTimeout(sb.from('app_state').select('state, updated_at').eq('user_id', session.user.id).single(), 15000);
+    if (error && error.code !== 'PGRST116') { console.error('Supabase pull failed:', error); return null; }
+    return data || null;
+  } catch(e) {
+    console.error('Supabase pull timeout:', e);
+    showToast('No se pudo conectar con la nube. Verificá que Supabase esté activo.', 'error');
+    return null;
+  }
 }
 
 function debouncedSupabasePush() {
