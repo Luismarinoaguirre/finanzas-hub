@@ -2006,6 +2006,14 @@ tr:hover td { background: var(--table-hover); }
         </select>
       </div>
     </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--glass-border);">
+      <span style="font-size:12px;color:var(--text-secondary);font-weight:600;">Combinar filtros:</span>
+      <div id="report-logic-toggle" style="display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--glass-border);">
+        <button id="report-logic-and" onclick="setReportLogic('and')" style="padding:5px 16px;font-size:11px;font-weight:700;border:none;cursor:pointer;background:var(--blue);color:#fff;">Y (todos)</button>
+        <button id="report-logic-or" onclick="setReportLogic('or')" style="padding:5px 16px;font-size:11px;font-weight:700;border:none;cursor:pointer;background:var(--bg-card);color:var(--text-secondary);">O (cualquiera)</button>
+      </div>
+      <span id="report-logic-hint" style="font-size:11px;color:var(--text-tertiary);">Debe cumplir todos los filtros</span>
+    </div>
   </div>
 
   <!-- Report results -->
@@ -6682,6 +6690,23 @@ function applyReportPreset(type) {
   generateReport();
 }
 
+var _reportLogic = 'and';
+function setReportLogic(mode) {
+  _reportLogic = mode;
+  const andBtn = document.getElementById('report-logic-and');
+  const orBtn = document.getElementById('report-logic-or');
+  const hint = document.getElementById('report-logic-hint');
+  if (mode === 'and') {
+    andBtn.style.background = 'var(--blue)'; andBtn.style.color = '#fff';
+    orBtn.style.background = 'var(--bg-card)'; orBtn.style.color = 'var(--text-secondary)';
+    hint.textContent = 'Debe cumplir todos los filtros';
+  } else {
+    orBtn.style.background = 'var(--blue)'; orBtn.style.color = '#fff';
+    andBtn.style.background = 'var(--bg-card)'; andBtn.style.color = 'var(--text-secondary)';
+    hint.textContent = 'Basta con cumplir cualquier filtro';
+  }
+}
+
 function initReportFilters() {
   // Set default dates (current month)
   const now = new Date();
@@ -6720,24 +6745,28 @@ function generateReport() {
     return;
   }
 
+  const reimbR = document.getElementById('report-reimbursement')?.value;
+
+  const checks = [];
+  if (cat) checks.push(t => t.category === cat);
+  if (bank) checks.push(t => t.bank === bank);
+  if (currency) checks.push(t => t.currency === currency);
+  if (status) checks.push(t => t.status === status);
+  if (type === 'gastos') checks.push(t => t.status !== 'COBRADO');
+  if (type === 'ingresos') checks.push(t => t.status === 'COBRADO');
+  if (search) checks.push(t => t.description.toLowerCase().includes(search));
+  if (shared === 'shared') checks.push(t => !!t.shared);
+  if (shared === 'individual') checks.push(t => !t.shared);
+  if (reimbR === 'pending') checks.push(t => getSharedStatus(t) === 'pending');
+  if (reimbR === 'partial') checks.push(t => getSharedStatus(t) === 'partial');
+  if (reimbR === 'complete') checks.push(t => getSharedStatus(t) === 'complete');
+  if (reimbR === 'is-reimbursement') checks.push(t => !!t.reimbursementFor);
+
   let txns = state.transactions.filter(t => {
     const d = t.date instanceof Date ? t.date : new Date(t.date);
     if (d < from || d > to) return false;
-    if (cat && t.category !== cat) return false;
-    if (bank && t.bank !== bank) return false;
-    if (currency && t.currency !== currency) return false;
-    if (status && t.status !== status) return false;
-    if (type === 'gastos' && t.status === 'COBRADO') return false;
-    if (type === 'ingresos' && t.status !== 'COBRADO') return false;
-    if (search && !t.description.toLowerCase().includes(search)) return false;
-    if (shared === 'shared' && !t.shared) return false;
-    if (shared === 'individual' && !!t.shared) return false;
-    const reimbR = document.getElementById('report-reimbursement')?.value;
-    if (reimbR === 'pending' && getSharedStatus(t) !== 'pending') return false;
-    if (reimbR === 'partial' && getSharedStatus(t) !== 'partial') return false;
-    if (reimbR === 'complete' && getSharedStatus(t) !== 'complete') return false;
-    if (reimbR === 'is-reimbursement' && !t.reimbursementFor) return false;
-    return true;
+    if (!checks.length) return true;
+    return _reportLogic === 'and' ? checks.every(fn => fn(t)) : checks.some(fn => fn(t));
   });
 
   _reportTxns = txns;
