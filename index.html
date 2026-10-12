@@ -4668,7 +4668,34 @@ function processPDF(file) {
       const isGaliciaTC = fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia');
       const isGaliciaDebit = /Banco Galicia/i.test(fullText) && /Caja de ahorro/i.test(fullText);
       const isBrubankVisa = isBrubank && (fullText.includes('Ciclo de facturación') || fullText.includes('Tarjeta') || fullText.includes('Vencimiento actual'));
+      const isCocos = /Cocos Capital/i.test(fullText) && /INCREMENTOS\/DECREMENTOS/i.test(fullText);
       const isTakenos = /TAKENOS/i.test(fullText) || /Extracto de movimientos/i.test(fullText) && /USD/i.test(fullText) && /\*{4}\s+\w+/.test(fullText);
+
+      if (isCocos) {
+        const convs = parseCocosPDF(lines);
+        if (!convs.length) {
+          showImportError(file.name, 'No se encontraron conversiones USD→ARS en el PDF de Cocos.', 'Asegurate de que el PDF contiene la sección "INCREMENTOS/DECREMENTOS DE LA INVERSION".');
+          return;
+        }
+        if (!state.conversions) state.conversions = [];
+        const existingDates = new Set(state.conversions.map(c => c.date + '|' + c.usd));
+        let added = 0, skipped = 0;
+        convs.forEach(c => {
+          const key = c.date + '|' + c.usd;
+          if (existingDates.has(key)) { skipped++; return; }
+          state.conversions.push(c);
+          if (!state.usdRateHistory) state.usdRateHistory = {};
+          state.usdRateHistory[c.date] = state.usdRateHistory[c.date] || { compra: c.rate, venta: c.rate };
+          added++;
+        });
+        saveState();
+        renderUSDBalance();
+        closeModal('import-modal');
+        let msg = `${added} conversión${added !== 1 ? 'es' : ''} USD→ARS importada${added !== 1 ? 's' : ''} de Cocos Capital`;
+        if (skipped) msg += ` (${skipped} ya existente${skipped !== 1 ? 's' : ''})`;
+        showToast(msg, 'success');
+        return;
+      }
 
       if (isTakenos) {
         txns = parseTakenosPDF(lines);
@@ -4696,7 +4723,7 @@ function processPDF(file) {
         showImportError(file.name,
           'No se encontraron movimientos en el PDF.',
           '<b>Primeras líneas detectadas:</b><br>' + sample +
-          '<br><br>Soportamos: <b>Brubank</b> (extracto de cuenta), <b>Galicia</b> (resumen Amex/Visa) y <b>Galicia</b> (caja de ahorro).'
+          '<br><br>Soportamos: <b>Brubank</b> (extracto/TC), <b>Galicia</b> (Amex/Visa/caja de ahorro), <b>Takenos</b> (USD) y <b>Cocos Capital</b> (conversiones).'
         ); return;
       }
       finishImport(txns, file.name);
@@ -4850,6 +4877,28 @@ function parseBrubankPDF(lines) {
     });
   }
   return txns;
+}
+
+// ── Cocos Capital PDF → conversions USD→ARS ───────────
+function parseCocosPDF(lines) {
+  const convs = [];
+  const pAR = s => { if (!s) return 0; return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0; };
+  for (const line of lines) {
+    const m = line.match(/^(\d{2}-\d{2}-\d{4})\s+Recibo De Cobro Dolares\s*-\s*\d+\s+USD\s+([\d.,]+)\s+([\d.,]+)\*?\s+([\d.,]+)$/);
+    if (!m) continue;
+    const [, dateStr, rateStr, arsStr, usdStr] = m;
+    const dp = dateStr.split('-');
+    const date = `${dp[2]}-${dp[1]}-${dp[0]}`;
+    const usd = pAR(usdStr);
+    const rate = pAR(rateStr);
+    const ars = pAR(arsStr) || Math.round(usd * rate);
+    if (!usd || !rate) continue;
+    convs.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      date, usd, rate, ars, notes: 'Cocos Capital MEP'
+    });
+  }
+  return convs;
 }
 
 // ── Takenos USD account PDF ───────────
