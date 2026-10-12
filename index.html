@@ -4668,8 +4668,11 @@ function processPDF(file) {
       const isGaliciaTC = fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia');
       const isGaliciaDebit = /Banco Galicia/i.test(fullText) && /Caja de ahorro/i.test(fullText);
       const isBrubankVisa = isBrubank && (fullText.includes('Ciclo de facturación') || fullText.includes('Tarjeta') || fullText.includes('Vencimiento actual'));
+      const isTakenos = /TAKENOS/i.test(fullText) || /Extracto de movimientos/i.test(fullText) && /USD/i.test(fullText) && /\*{4}\s+\w+/.test(fullText);
 
-      if (isGaliciaDebit) {
+      if (isTakenos) {
+        txns = parseTakenosPDF(lines);
+      } else if (isGaliciaDebit) {
         txns = parseGaliciaDebitPDF(lines);
       } else if (isGaliciaTC) {
         txns = parseGaliciaPDF(lines);
@@ -4681,7 +4684,8 @@ function processPDF(file) {
         if (!txns.length) txns = parseBrubankVisaPDF(lines); // fallback
       } else {
         // Try all parsers
-        txns = parseBrubankVisaPDF(lines);
+        txns = parseTakenosPDF(lines);
+        if (!txns.length) txns = parseBrubankVisaPDF(lines);
         if (!txns.length) txns = parseBrubankPDF(lines);
         if (!txns.length) txns = parseGaliciaPDF(lines);
         if (!txns.length) txns = parseGaliciaDebitPDF(lines);
@@ -4841,6 +4845,44 @@ function parseBrubankPDF(lines) {
       id: uid(), date: pd, description: desc.trim(), amount: Math.round(amount*100)/100,
       currency, category: auto_cat(desc), status: isGasto?'PAGADO':'COBRADO',
       bank: 'Brubank', tcId: '', empresa: '', cuotaNum: null, cuotaTotal: null,
+      month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
+      week: '', source: 'cuenta'
+    });
+  }
+  return txns;
+}
+
+// ── Takenos USD account PDF ───────────
+function parseTakenosPDF(lines) {
+  const txns = [];
+  const pAR = s => {
+    if (!s) return 0;
+    return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0;
+  };
+  for (const line of lines) {
+    const m = line.match(/^(\d{2}-\d{2}-\d{4})\s+\*{4}\s+\w+\s+(Transferencia|Depósito|Ingreso|Egreso)\s+(?:(.+?)\s+)?USD\s+([+-][\d.,]+)\s+[\d.,]+$/);
+    if (!m) continue;
+    const [, dateStr, movType, detail, amtStr] = m;
+    const dp = dateStr.split('-');
+    const pd = new Date(parseInt(dp[2]), parseInt(dp[1])-1, parseInt(dp[0]));
+    if (isNaN(pd.getTime())) continue;
+    const rawAmt = pAR(amtStr.replace('+','').replace('-',''));
+    if (!rawAmt) continue;
+    const isGasto = amtStr.startsWith('-');
+    const det = (detail || '').trim();
+    let desc = det || movType;
+    if (det === 'usd_mep') desc = 'Venta USD MEP (Cocos)';
+    else if (det === 'wise') desc = 'Depósito Wise (sueldo)';
+    else if (/Transferencia ACH/i.test(det)) desc = 'Depósito ACH (sueldo)';
+    else if (/Transferencia$/i.test(det) && !isGasto) desc = 'Depósito (sueldo)';
+    else if (/Luis Bautista/i.test(det)) desc = 'Transferencia a cuenta propia';
+    let cat = 'Transferencia';
+    if (!isGasto && (det === 'wise' || /ACH/i.test(det) || /Transferencia$/i.test(det) || !det)) cat = 'Laburo';
+    if (det === 'usd_mep') cat = 'Transferencia';
+    txns.push({
+      id: uid(), date: pd, description: desc, amount: Math.round(rawAmt*100)/100,
+      currency: 'USD', category: cat, status: isGasto ? 'PAGADO' : 'COBRADO',
+      bank: 'Takenos', tcId: '', empresa: '', cuotaNum: null, cuotaTotal: null,
       month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
       week: '', source: 'cuenta'
     });
