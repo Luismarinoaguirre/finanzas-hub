@@ -4708,7 +4708,7 @@ function processPDF(file) {
         });
         saveState();
         renderUSDBalance();
-        closeModal('import-modal');
+        closeModal('modal-import');
         let msg = `${added} conversión${added !== 1 ? 'es' : ''} USD→ARS importada${added !== 1 ? 's' : ''} de Cocos Capital`;
         if (skipped) msg += ` (${skipped} ya existente${skipped !== 1 ? 's' : ''})`;
         if (linked) msg += ` · ${linked} movimiento${linked !== 1 ? 's' : ''} Takenos actualizado${linked !== 1 ? 's' : ''}`;
