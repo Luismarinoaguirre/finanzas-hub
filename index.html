@@ -4688,11 +4688,27 @@ function processPDF(file) {
           state.usdRateHistory[c.date] = state.usdRateHistory[c.date] || { compra: c.rate, venta: c.rate };
           added++;
         });
+        let linked = 0;
+        convs.forEach(c => {
+          const cDate = new Date(c.date);
+          state.transactions.forEach(t => {
+            if (t.bank !== 'Takenos' || t.currency !== 'USD') return;
+            if (!/usd_mep|Venta USD MEP/i.test(t.description)) return;
+            if (/→/.test(t.description)) return;
+            const tDate = t.date instanceof Date ? t.date : new Date(t.date);
+            const diffDays = Math.abs((cDate - tDate) / 86400000);
+            if (diffDays > 1) return;
+            if (Math.abs(t.amount - c.usd) / c.usd > 0.05) return;
+            t.description = `Venta USD MEP → $${c.rate.toLocaleString('es-AR')}/USD`;
+            linked++;
+          });
+        });
         saveState();
         renderUSDBalance();
         closeModal('import-modal');
         let msg = `${added} conversión${added !== 1 ? 'es' : ''} USD→ARS importada${added !== 1 ? 's' : ''} de Cocos Capital`;
         if (skipped) msg += ` (${skipped} ya existente${skipped !== 1 ? 's' : ''})`;
+        if (linked) msg += ` · ${linked} movimiento${linked !== 1 ? 's' : ''} Takenos actualizado${linked !== 1 ? 's' : ''}`;
         showToast(msg, 'success');
         return;
       }
