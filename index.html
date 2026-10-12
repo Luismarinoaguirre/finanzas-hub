@@ -4663,16 +4663,19 @@ function processPDF(file) {
       const fullText = lines.join('\n');
 
       // Auto-detect format
+      console.log('[PDF] Detectando formato...', { len: lines.length, first100: fullText.slice(0, 100) });
       let txns = [];
       const isBrubank = fullText.includes('brubank') || fullText.includes('Brubank');
       const isGaliciaTC = fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia');
       const isGaliciaDebit = /Banco Galicia/i.test(fullText) && /Caja de ahorro/i.test(fullText);
       const isBrubankVisa = isBrubank && (fullText.includes('Ciclo de facturación') || fullText.includes('Tarjeta') || fullText.includes('Vencimiento actual'));
-      const isCocos = /Cocos Capital/i.test(fullText) && /INCREMENTOS\/DECREMENTOS/i.test(fullText);
+      const isCocos = /Cocos Capital/i.test(fullText) && (/INCREMENTOS\/DECREMENTOS/i.test(fullText) || /Recibo De Cobro Dolares/i.test(fullText) || /comitente/i.test(fullText));
       const isTakenos = /TAKENOS/i.test(fullText) || /Extracto de movimientos/i.test(fullText) && /USD/i.test(fullText) && /\*{4}\s+\w+/.test(fullText);
 
       if (isCocos) {
+        console.log('[PDF] Detectado: Cocos Capital');
         const convs = parseCocosPDF(lines);
+        console.log('[PDF] Conversiones encontradas:', convs.length);
         if (!convs.length) {
           showImportError(file.name, 'No se encontraron conversiones USD→ARS en el PDF de Cocos.', 'Asegurate de que el PDF contiene la sección "INCREMENTOS/DECREMENTOS DE LA INVERSION".');
           return;
