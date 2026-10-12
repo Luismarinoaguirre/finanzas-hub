@@ -2917,6 +2917,25 @@ tr:hover td { background: var(--table-hover); }
       </div>
     </div>
 
+    <!-- Cocos conversions review state -->
+    <div id="import-cocos" style="display:none;">
+      <div style="margin-bottom:16px;">
+        <div class="modal-title" id="cocos-review-title">Conversiones Cocos Capital</div>
+        <div class="modal-sub" id="cocos-review-sub">—</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" id="cocos-stats-pills"></div>
+      <div id="cocos-conv-list" style="max-height:42vh;overflow-y:auto;border:1px solid var(--glass-border);border-radius:10px;"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--glass-border);flex-wrap:wrap;gap:10px;">
+        <div style="font-size:12px;color:var(--text-secondary);" id="cocos-footer-note"></div>
+        <div class="modal-actions" style="margin:0;">
+          <button class="btn btn-glass" onclick="closeModal('modal-import')">Cancelar</button>
+          <button class="btn btn-primary" id="cocos-confirm-btn" onclick="confirmCocosImport()">
+            <span id="cocos-confirm-label">Confirmar</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -3735,6 +3754,7 @@ function openImportModal(state='loading', filename='') {
   document.getElementById('import-loading').style.display = state==='loading' ? 'block' : 'none';
   document.getElementById('import-error').style.display   = state==='error'   ? 'block' : 'none';
   document.getElementById('import-review').style.display  = state==='review'  ? 'block' : 'none';
+  document.getElementById('import-cocos').style.display   = state==='cocos'   ? 'block' : 'none';
   document.getElementById('modal-import').classList.add('open');
   if (filename) document.getElementById('import-loading-title').textContent = 'Procesando ' + filename + '…';
 }
@@ -4673,46 +4693,12 @@ function processPDF(file) {
       const isTakenos = /TAKENOS/i.test(fullText) || /Extracto de movimientos/i.test(fullText) && /USD/i.test(fullText) && /\*{4}\s+\w+/.test(fullText);
 
       if (isCocos) {
-        console.log('[PDF] Detectado: Cocos Capital');
         const convs = parseCocosPDF(lines);
-        console.log('[PDF] Conversiones encontradas:', convs.length);
         if (!convs.length) {
           showImportError(file.name, 'No se encontraron conversiones USD→ARS en el PDF de Cocos.', 'Asegurate de que el PDF contiene la sección "INCREMENTOS/DECREMENTOS DE LA INVERSION".');
           return;
         }
-        if (!state.conversions) state.conversions = [];
-        const existingDates = new Set(state.conversions.map(c => c.date + '|' + c.usd));
-        let added = 0, skipped = 0;
-        convs.forEach(c => {
-          const key = c.date + '|' + c.usd;
-          if (existingDates.has(key)) { skipped++; return; }
-          state.conversions.push(c);
-          if (!state.usdRateHistory) state.usdRateHistory = {};
-          state.usdRateHistory[c.date] = state.usdRateHistory[c.date] || { compra: c.rate, venta: c.rate };
-          added++;
-        });
-        let linked = 0;
-        convs.forEach(c => {
-          const cDate = new Date(c.date);
-          state.transactions.forEach(t => {
-            if (t.bank !== 'Takenos' || t.currency !== 'USD') return;
-            if (!/usd_mep|Venta USD MEP/i.test(t.description)) return;
-            if (/→/.test(t.description)) return;
-            const tDate = t.date instanceof Date ? t.date : new Date(t.date);
-            const diffDays = Math.abs((cDate - tDate) / 86400000);
-            if (diffDays > 1) return;
-            if (Math.abs(t.amount - c.usd) / c.usd > 0.05) return;
-            t.description = `Venta USD MEP → $${c.rate.toLocaleString('es-AR')}/USD`;
-            linked++;
-          });
-        });
-        saveState();
-        renderUSDBalance();
-        closeModal('modal-import');
-        let msg = `${added} conversión${added !== 1 ? 'es' : ''} USD→ARS importada${added !== 1 ? 's' : ''} de Cocos Capital`;
-        if (skipped) msg += ` (${skipped} ya existente${skipped !== 1 ? 's' : ''})`;
-        if (linked) msg += ` · ${linked} movimiento${linked !== 1 ? 's' : ''} Takenos actualizado${linked !== 1 ? 's' : ''}`;
-        showToast(msg, 'success');
+        showCocosReview(convs, file.name);
         return;
       }
 
@@ -4896,6 +4882,122 @@ function parseBrubankPDF(lines) {
     });
   }
   return txns;
+}
+
+// ── Cocos Capital review & confirm ───────────
+var _cocosPending = [];
+
+function showCocosReview(convs, filename) {
+  if (!state.conversions) state.conversions = [];
+  const existingKeys = new Set(state.conversions.map(c => c.date + '|' + c.usd));
+
+  _cocosPending = convs.map(c => {
+    const isDupe = existingKeys.has(c.date + '|' + c.usd);
+    let matchedTxn = null;
+    const cDate = new Date(c.date);
+    state.transactions.forEach(t => {
+      if (t.bank !== 'Takenos' || t.currency !== 'USD') return;
+      if (!/usd_mep|Venta USD MEP/i.test(t.description)) return;
+      const tDate = t.date instanceof Date ? t.date : new Date(t.date);
+      if (Math.abs((cDate - tDate) / 86400000) > 1) return;
+      if (Math.abs(t.amount - c.usd) / c.usd > 0.05) return;
+      matchedTxn = t;
+    });
+    return { ...c, isDupe, matchedTxn, _incluir: !isDupe };
+  });
+
+  const newCount = _cocosPending.filter(c => !c.isDupe).length;
+  const dupeCount = _cocosPending.filter(c => c.isDupe).length;
+  const linkedCount = _cocosPending.filter(c => c.matchedTxn && !c.isDupe).length;
+  const totalUSD = _cocosPending.filter(c => !c.isDupe).reduce((s,c) => s + c.usd, 0);
+
+  document.getElementById('cocos-review-title').textContent = 'Conversiones — ' + filename;
+  document.getElementById('cocos-review-sub').textContent =
+    newCount + ' conversiones USD→ARS' + (dupeCount ? ' · ' + dupeCount + ' ya importadas' : '');
+
+  const pills = [
+    { label: newCount + ' nuevas', color: 'var(--green)' },
+    dupeCount ? { label: dupeCount + ' existentes', color: 'var(--orange)' } : null,
+    linkedCount ? { label: linkedCount + ' matchean Takenos', color: 'var(--blue)' } : null,
+    totalUSD ? { label: 'U$D ' + fmtN(totalUSD) + ' total', color: 'var(--teal)' } : null,
+  ].filter(Boolean);
+  document.getElementById('cocos-stats-pills').innerHTML = pills.map(p =>
+    `<span style="background:var(--glass);border:1px solid var(--glass-border);border-radius:20px;padding:4px 10px;font-size:11px;color:${p.color};">${p.label}</span>`
+  ).join('');
+
+  renderCocosConvList();
+
+  const toImport = _cocosPending.filter(c => c._incluir).length;
+  document.getElementById('cocos-confirm-label').textContent = 'Confirmar ' + toImport + ' conversiones';
+  document.getElementById('cocos-footer-note').textContent = linkedCount
+    ? '🔗 ' + linkedCount + ' movimiento' + (linkedCount !== 1 ? 's' : '') + ' de Takenos se actualizarán con el tipo de cambio'
+    : 'Las conversiones se registran en el widget USD/Divisas';
+
+  openImportModal('cocos');
+}
+
+function renderCocosConvList() {
+  const container = document.getElementById('cocos-conv-list');
+  container.innerHTML = _cocosPending.map((c, idx) => {
+    const d = new Date(c.date);
+    const dateStr = d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear();
+    const matchInfo = c.matchedTxn
+      ? `<div style="font-size:10px;color:var(--blue);margin-top:2px;">🔗 Takenos: ${esc(c.matchedTxn.description)} (U$D ${fmtN(c.matchedTxn.amount)})</div>`
+      : '';
+    const dupeInfo = c.isDupe
+      ? `<div style="font-size:10px;color:var(--orange);margin-top:1px;">⚠ Ya importada</div>` : '';
+
+    const rowBg = c.isDupe
+      ? (c._incluir ? 'background:rgba(34,197,94,0.05);border-left:3px solid var(--green);' : 'background:rgba(251,146,60,0.05);border-left:3px solid var(--orange);opacity:0.7;')
+      : (c.matchedTxn ? 'border-left:3px solid var(--blue);' : '');
+
+    const toggleBtn = c.isDupe
+      ? `<button onclick="toggleCocosInclude(${idx})" style="flex-shrink:0;padding:4px 10px;border-radius:20px;border:1px solid ${c._incluir?'var(--green)':'var(--orange)'};background:transparent;color:${c._incluir?'var(--green)':'var(--orange)'};font-size:11px;font-weight:600;cursor:pointer;">${c._incluir ? '✓ Incluir' : 'Incluir'}</button>`
+      : '';
+
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--table-border);${rowBg}">
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--glass);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">💱</div>
+      <div style="width:68px;flex-shrink:0;font-size:11px;color:var(--text-tertiary);font-variant-numeric:tabular-nums;padding-top:2px;">${dateStr}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:500;">U$D ${fmtN(c.usd)} → $${fmtN(c.ars)}</div>
+        <div style="font-size:10px;color:var(--text-tertiary);margin-top:1px;">TC MEP: $${c.rate.toLocaleString('es-AR')}/USD</div>
+        ${matchInfo}${dupeInfo}
+      </div>
+      <div style="flex-shrink:0;font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">$${fmtN(c.ars)}</div>
+      ${toggleBtn}
+    </div>`;
+  }).join('');
+}
+
+function toggleCocosInclude(idx) {
+  _cocosPending[idx]._incluir = !_cocosPending[idx]._incluir;
+  const toImport = _cocosPending.filter(c => c._incluir).length;
+  document.getElementById('cocos-confirm-label').textContent = 'Confirmar ' + toImport + ' conversiones';
+  renderCocosConvList();
+}
+
+function confirmCocosImport() {
+  const toImport = _cocosPending.filter(c => c._incluir);
+  if (!toImport.length) { showToast('No hay conversiones para importar', 'error'); return; }
+  if (!state.conversions) state.conversions = [];
+  let added = 0, linked = 0;
+  toImport.forEach(c => {
+    state.conversions.push({ id: c.id, date: c.date, usd: c.usd, rate: c.rate, ars: c.ars, notes: c.notes });
+    if (!state.usdRateHistory) state.usdRateHistory = {};
+    state.usdRateHistory[c.date] = state.usdRateHistory[c.date] || { compra: c.rate, venta: c.rate };
+    added++;
+    if (c.matchedTxn && !/→/.test(c.matchedTxn.description)) {
+      c.matchedTxn.description = `Venta USD MEP → $${c.rate.toLocaleString('es-AR')}/USD`;
+      linked++;
+    }
+  });
+  saveState();
+  renderUSDBalance();
+  closeModal('modal-import');
+  let msg = `${added} conversión${added !== 1 ? 'es' : ''} importada${added !== 1 ? 's' : ''}`;
+  if (linked) msg += ` · ${linked} mov. Takenos actualizado${linked !== 1 ? 's' : ''}`;
+  showToast(msg, 'success');
+  _cocosPending = [];
 }
 
 // ── Cocos Capital PDF → conversions USD→ARS ───────────
