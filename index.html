@@ -4632,7 +4632,7 @@ function processPDF(file) {
       console.log('[PDF] Detectando formato...', { len: lines.length, first100: fullText.slice(0, 100) });
       let txns = [];
       const isBrubank = fullText.includes('brubank') || fullText.includes('Brubank');
-      const isGaliciaTC = fullText.includes('DETALLE DE TRANSACCION') || fullText.includes('American Express') || fullText.includes('Banco de Galicia');
+      const isGaliciaTC = /DETALLE DE TRANSACCION/i.test(fullText) || /American Express/i.test(fullText) || /Banco de Galicia/i.test(fullText);
       const isGaliciaDebit = /Banco Galicia/i.test(fullText) && /Caja de ahorro/i.test(fullText);
       const isBrubankVisa = isBrubank && (fullText.includes('Ciclo de facturación') || fullText.includes('Tarjeta') || fullText.includes('Vencimiento actual'));
       const isCocos = /Cocos Capital/i.test(fullText) && (/INCREMENTOS\/DECREMENTOS/i.test(fullText) || /Recibo De Cobro Dolares/i.test(fullText) || /comitente/i.test(fullText));
@@ -4713,7 +4713,7 @@ function parseGaliciaPDF(lines) {
   const txnRe = /^(\d{2}\.\d{2}\.\d{2,4})\s+(?:\d+\*\s+|=)?(.+?)\s+([\d.]+,\d{2}-?)\s*(?:([\d.]+,\d{2}-?))?$/;
 
   for (const line of lines) {
-    if (/FECHA\s+COMPROBANTE\s+DETALLE/i.test(line)) { inTxns = true; continue; }
+    if (/FECHA\s+COMPROBANTE\s+DETALLE/i.test(line) || /En pesos\s+De compras/i.test(line)) { inTxns = true; continue; }
     if (/SALDO ACTUAL/i.test(line)) { inTxns = false; continue; }
     if (!inTxns) continue;
     if (SKIP_LINES.test(line.trim())) continue;
