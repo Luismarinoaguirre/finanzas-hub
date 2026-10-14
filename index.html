@@ -2400,6 +2400,11 @@ tr:hover td { background: var(--table-hover); }
         <input type="url" class="input-field" id="cfg-gsheets-url" placeholder="https://docs.google.com/spreadsheets/d/..." oninput="saveConfig()">
         <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px;">Pegá el link de tu Google Sheet para sincronizar gastos desde el celular</div>
       </div>
+      <div class="input-group" style="margin-bottom:14px;">
+        <div class="input-label">Saldo inicial USD (ahorros actuales)</div>
+        <input type="number" class="input-field" id="cfg-usd-initial" placeholder="0" min="0" step="0.01" oninput="saveConfig()">
+        <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px;">Tu saldo real en USD hoy. El balance se calcula desde acá + cobros - cambios.</div>
+      </div>
       <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--glass);border:1px solid var(--glass-border);border-radius:10px;">
         <span style="font-size:11px;color:var(--text-secondary);">Dólar MEP:</span>
         <span style="font-size:13px;font-weight:600;color:var(--text-primary);" id="cfg-rate-display">—</span>
@@ -3018,6 +3023,7 @@ let state = {
   monthlyIncome: {},
   ignoredDupes: [],
   excludedCats: ['Transferencia'],
+  usdInitialBalance: 0,
 };
 
 let chartInvPie = null;
@@ -5702,7 +5708,8 @@ function renderUSDBalance() {
 
   const allConvs = (state.conversions || []);
   const totalConvertedAll = allConvs.reduce((s,c) => s + (c.usd || 0), 0);
-  const available = totalIncomeUSD - totalConvertedAll;
+  const initialBalance = state.usdInitialBalance || 0;
+  const available = initialBalance + totalIncomeUSD - totalConvertedAll;
 
   const inc = getMonthIncome(mk);
   const salaryUSD = (inc.usd || 0) + (inc.usdVar || 0);
@@ -7464,11 +7471,14 @@ function exportReportPDF() {
 // ═══════════════════════════════════════════════
 function saveConfig() {
   state.gsheetsUrl = document.getElementById('cfg-gsheets-url').value.trim();
+  state.usdInitialBalance = parseFloat(document.getElementById('cfg-usd-initial').value) || 0;
   saveState();
+  renderUSDBalance();
 }
 
 function renderSettings() {
   document.getElementById('cfg-gsheets-url').value = state.gsheetsUrl||'';
+  document.getElementById('cfg-usd-initial').value = state.usdInitialBalance || '';
   const rateDisplay = document.getElementById('cfg-rate-display');
   if (rateDisplay) rateDisplay.textContent = '$' + fmtN(state.usdRate || 0);
   const autoEl = document.getElementById('cfg-rate-auto');
