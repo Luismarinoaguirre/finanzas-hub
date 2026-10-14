@@ -1506,25 +1506,31 @@ tr:hover td { background: var(--table-hover); }
         <button class="btn btn-glass" onclick="openConversionModal()" style="margin-top:14px;font-size:11px;padding:6px 14px;width:100%;">💱 Registrar cambio USD → ARS</button>
       </div>
       <div class="glass-card" style="padding:20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div class="chart-card-title" style="margin:0;">💰 Balance USD</div>
-          <button class="btn btn-glass" onclick="nav('settings')" style="font-size:10px;padding:4px 10px;">⚙ Config</button>
         </div>
-        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px;">
+          <div id="usd-available" style="font-size:32px;font-weight:800;letter-spacing:-1px;color:var(--blue);">—</div>
+          <div style="font-size:11px;color:var(--text-tertiary);">disponibles</div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--glass-border);">
           <div>
-            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Sueldo USD</div>
-            <div id="usd-income" style="font-size:22px;font-weight:800;color:var(--green);">—</div>
+            <div id="usd-month-label" style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Este mes</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Cobrado</div>
+            <div id="usd-income" style="font-size:18px;font-weight:700;color:var(--green);">—</div>
           </div>
           <div>
             <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Cambiado</div>
-            <div id="usd-converted" style="font-size:22px;font-weight:800;color:var(--red);">—</div>
+            <div id="usd-converted" style="font-size:18px;font-weight:700;color:var(--red);">—</div>
           </div>
-          <div>
-            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Disponible</div>
-            <div id="usd-available" style="font-size:22px;font-weight:800;color:var(--blue);">—</div>
+          <div style="margin-left:auto;">
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Total histórico</div>
+            <div id="usd-total-income" style="font-size:14px;font-weight:600;color:var(--text-secondary);">—</div>
           </div>
         </div>
-        <div id="usd-conversions-list" style="margin-top:14px;max-height:120px;overflow-y:auto;"></div>
+        <div id="usd-conversions-list" style="margin-top:10px;max-height:120px;overflow-y:auto;"></div>
       </div>
     </div>
 
@@ -5680,27 +5686,44 @@ function renderUSDBalance() {
   const incomeEl = document.getElementById('usd-income');
   const convertedEl = document.getElementById('usd-converted');
   const availableEl = document.getElementById('usd-available');
+  const totalIncEl = document.getElementById('usd-total-income');
+  const monthLabel = document.getElementById('usd-month-label');
   const listEl = document.getElementById('usd-conversions-list');
   if (!incomeEl) return;
 
   const mk = state.dashMonth || (new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0'));
+
+  const allMonths = [...new Set(state.transactions.filter(t => t.currency === 'USD' && t.status === 'COBRADO').map(t => getMonthKey(t.date)))].sort();
+  let totalIncomeUSD = 0;
+  for (const m of allMonths) {
+    const mInc = getMonthIncome(m);
+    totalIncomeUSD += (mInc.usd || 0) + (mInc.usdVar || 0);
+  }
+
+  const allConvs = (state.conversions || []);
+  const totalConvertedAll = allConvs.reduce((s,c) => s + (c.usd || 0), 0);
+  const available = totalIncomeUSD - totalConvertedAll;
+
   const inc = getMonthIncome(mk);
-  const salaryUSD = mk >= '2025-07' ? (inc.usd || 0) + (inc.usdVar || 0) : 0;
+  const salaryUSD = (inc.usd || 0) + (inc.usdVar || 0);
+  const monthConvs = allConvs.filter(c => c.date && c.date.startsWith(mk));
+  const monthConverted = monthConvs.reduce((s,c) => s + (c.usd || 0), 0);
 
-  const convs = (state.conversions || []).filter(c => c.date && c.date.startsWith(mk));
-  const totalConverted = convs.reduce((s,c) => s + (c.usd || 0), 0);
-  const available = salaryUSD - totalConverted;
+  const [y, m] = mk.split('-').map(Number);
+  const monthName = new Date(y, m-1).toLocaleDateString('es-AR', { month: 'short' }).toUpperCase();
+  if (monthLabel) monthLabel.textContent = monthName + ' ' + y;
 
-  incomeEl.textContent = 'U$D ' + fmtN(salaryUSD);
-  convertedEl.textContent = 'U$D ' + fmtN(totalConverted);
   availableEl.textContent = 'U$D ' + fmtN(available);
   availableEl.style.color = available >= 0 ? 'var(--blue)' : 'var(--red)';
+  incomeEl.textContent = 'U$D ' + fmtN(salaryUSD);
+  convertedEl.textContent = 'U$D ' + fmtN(monthConverted);
+  if (totalIncEl) totalIncEl.textContent = 'U$D ' + fmtN(totalIncomeUSD) + ' cobrado · U$D ' + fmtN(totalConvertedAll) + ' cambiado';
 
-  if (!convs.length) {
+  if (!monthConvs.length) {
     listEl.innerHTML = '<div style="font-size:11px;color:var(--text-tertiary);padding:8px 0;">Sin cambios este mes</div>';
     return;
   }
-  listEl.innerHTML = convs.sort((a,b) => new Date(b.date)-new Date(a.date)).map(c => {
+  listEl.innerHTML = monthConvs.sort((a,b) => new Date(b.date)-new Date(a.date)).map(c => {
     const d = new Date(c.date);
     const ds = d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--glass-border);font-size:12px;">
