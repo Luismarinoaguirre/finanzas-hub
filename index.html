@@ -2557,6 +2557,31 @@ tr:hover td { background: var(--table-hover); }
         </div>
       </div>
     </div>
+      <div class="input-group modal-full" id="txn-loan-group">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div class="input-label" style="margin:0;">Presté plata de este gasto</div>
+          <label style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0;">
+            <input type="checkbox" id="txn-loan" onchange="toggleLoan()" style="opacity:0;width:0;height:0;position:absolute;">
+            <span style="position:absolute;inset:0;background:var(--glass-border);border-radius:11px;transition:.3s;" id="txn-loan-track"></span>
+            <span style="position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,0.15);" id="txn-loan-thumb"></span>
+          </label>
+        </div>
+        <div id="txn-loan-fields" style="display:none;gap:10px;align-items:flex-end;">
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px;">Monto prestado</div>
+            <input type="number" class="input-field" id="txn-loan-amount" placeholder="0" min="0" step="0.01" oninput="updateLoanPreview()">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px;">A quién (opcional)</div>
+            <input type="text" class="input-field" id="txn-loan-to" placeholder="Nombre">
+          </div>
+          <div id="txn-loan-preview" style="flex:1;padding:10px 14px;background:var(--bg-surface);border-radius:8px;text-align:center;">
+            <div style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;margin-bottom:2px;">Tu gasto real</div>
+            <div style="font-size:16px;font-weight:700;color:var(--blue);" id="txn-loan-result">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- Para revisar flag -->
     <div style="padding:0 20px 16px;display:flex;align-items:center;gap:10px;">
       <label style="position:relative;width:36px;height:20px;cursor:pointer;flex-shrink:0;">
@@ -3412,6 +3437,13 @@ function openNewTxn(id) {
   document.getElementById('txn-shared-people').value = txn ? (txn.sharedPeople || 2) : 2;
   toggleSharedExpense();
 
+  // Loan fields
+  const loanCb = document.getElementById('txn-loan');
+  loanCb.checked = txn ? !!txn.loanAmount : false;
+  document.getElementById('txn-loan-amount').value = txn && txn.loanAmount ? txn.loanAmount : '';
+  document.getElementById('txn-loan-to').value = txn && txn.loanTo ? txn.loanTo : '';
+  toggleLoan();
+
   // Needs review flag
   const reviewCb = document.getElementById('txn-needs-review');
   reviewCb.checked = txn ? !!txn.needsReview : false;
@@ -3541,6 +3573,27 @@ function updateSharedPreview() {
   result.textContent = people > 0 ? prefix + fmtN(Math.round(amount / people)) : '—';
 }
 
+function toggleLoan() {
+  const checked = document.getElementById('txn-loan').checked;
+  const fields = document.getElementById('txn-loan-fields');
+  const track = document.getElementById('txn-loan-track');
+  const thumb = document.getElementById('txn-loan-thumb');
+  fields.style.display = checked ? 'flex' : 'none';
+  track.style.background = checked ? 'var(--blue)' : 'var(--glass-border)';
+  thumb.style.left = checked ? '20px' : '2px';
+  if (checked) updateLoanPreview();
+}
+
+function updateLoanPreview() {
+  const amount = parseFloat(document.getElementById('txn-amount').value) || 0;
+  const loanAmt = parseFloat(document.getElementById('txn-loan-amount').value) || 0;
+  const result = document.getElementById('txn-loan-result');
+  const currency = document.getElementById('txn-currency').value;
+  const prefix = currency === 'USD' ? 'U$D ' : '$';
+  const real = Math.max(0, amount - loanAmt);
+  result.textContent = prefix + fmtN(Math.round(real));
+}
+
 function saveTxn() {
   const desc = document.getElementById('txn-desc').value.trim();
   let amount = parseFloat(document.getElementById('txn-amount').value);
@@ -3574,6 +3627,8 @@ function saveTxn() {
     shared: isShared,
     sharedPeople: isShared ? sharedPeople : null,
     originalAmount: isShared ? originalAmount : null,
+    loanAmount: document.getElementById('txn-loan').checked ? (parseFloat(document.getElementById('txn-loan-amount').value) || 0) : null,
+    loanTo: document.getElementById('txn-loan').checked ? (document.getElementById('txn-loan-to').value.trim() || null) : null,
     reimbursementFor: document.getElementById('txn-reimbursement-for')?.value || null,
     needsReview: document.getElementById('txn-needs-review')?.checked || false,
     month: getMonthKey(date),
@@ -3807,13 +3862,23 @@ function renderImportList() {
     const amtCol = isGasto ? 'var(--red)' : 'var(--green)';
     const amtSign = isGasto ? '-' : '+';
 
-    // Amount display (with shared split indicator)
-    const displayAmt = t.shared
-      ? `<div style="text-align:right;">
-           <div style="font-size:13px;font-weight:600;color:${amtCol};">${amtSign}${t.currency==='USD'?'U$D ':'$'}${fmtN(t.amount)}</div>
-           <div style="font-size:10px;color:var(--text-tertiary);">de ${t.currency==='USD'?'U$D ':'$'}${fmtN(t._originalAmount)} ÷${t.sharedPeople}</div>
-         </div>`
-      : `<div style="font-size:13px;font-weight:600;color:${amtCol};white-space:nowrap;min-width:80px;text-align:right;">${amtSign}${t.currency==='USD'?'U$D ':'$'}${fmtN(t.amount)}</div>`;
+    const prefix = t.currency==='USD'?'U$D ':'$';
+    let displayAmt;
+    if (t.shared) {
+      displayAmt = `<div style="text-align:right;">
+           <div style="font-size:13px;font-weight:600;color:${amtCol};">${amtSign}${prefix}${fmtN(t.amount)}</div>
+           <div style="font-size:10px;color:var(--text-tertiary);">de ${prefix}${fmtN(t._originalAmount)} ÷${t.sharedPeople}</div>
+         </div>`;
+    } else if (t.loanAmount) {
+      const realAmt = Math.max(0, t.amount - t.loanAmount);
+      const loanLabel = t.loanTo ? `Prestado a ${t.loanTo}` : 'Prestado';
+      displayAmt = `<div style="text-align:right;">
+           <div style="font-size:13px;font-weight:600;color:${amtCol};">${amtSign}${prefix}${fmtN(t.amount)}</div>
+           <div style="font-size:10px;color:var(--orange);">🤝 ${loanLabel}: ${prefix}${fmtN(t.loanAmount)}</div>
+         </div>`;
+    } else {
+      displayAmt = `<div style="font-size:13px;font-weight:600;color:${amtCol};white-space:nowrap;min-width:80px;text-align:right;">${amtSign}${prefix}${fmtN(t.amount)}</div>`;
+    }
 
     if (t.isDupe) {
       // Duplicate row: show with orange warning, let user include or discard
@@ -3986,6 +4051,11 @@ function editImportTxn(idx) {
   sharedCb.checked = !!txn.shared;
   document.getElementById('txn-shared-people').value = txn.sharedPeople || 2;
   toggleSharedExpense();
+  const loanCb2 = document.getElementById('txn-loan');
+  loanCb2.checked = !!txn.loanAmount;
+  document.getElementById('txn-loan-amount').value = txn.loanAmount || '';
+  document.getElementById('txn-loan-to').value = txn.loanTo || '';
+  toggleLoan();
   openModal('modal-txn');
 }
 
@@ -4687,7 +4757,6 @@ function processPDF(file) {
 function parseGaliciaPDF(lines) {
   const txns = [];
   const fullText = lines.join('\n');
-  // Detect card type for tcId
   const tcId = /American Express|AMEX/i.test(fullText) ? '8q6i1zg6y' : '4asb6nmo6';
 
   const pAR = s => {
@@ -4698,63 +4767,86 @@ function parseGaliciaPDF(lines) {
     return neg ? -val : val;
   };
 
-  // Find the transaction block: after "FECHA COMPROBANTE DETALLE DE TRANSACCION"
-  // and before "SALDO ACTUAL"
   let inTxns = false;
-  const SKIP_LINES = /^(SALDO ANTERIOR|SALDO ACTUAL|PAGO MINIMO|Tarjeta \d+ Total|_{3,}|Express Plan|CFTEA|Cuotas a vencer|Marzo|Abril|Mayo|LIMITES|Lectura)/i;
+  const MONTHS_RE = /^(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)$/i;
+  const SKIP_RE = /^(SALDO ANTERIOR|SALDO ACTUAL|PAGO MINIMO|Tarjeta \d+ Total|_{3,}|Express Plan|CFTEA|Cuotas a vencer|LIMITES|Lectura|CONSOLIDADO|TASAS|Nominal|En pesos\s+\$|En dólares|\$\s+[\d.])/i;
+  const isNewFmt = /DETALLE DEL CONSUMO/i.test(fullText) || /FECHA\s+REFERENCIA\s+CUOTA/i.test(fullText);
 
-  // Galicia date pattern: DD.MM.YY or DD.MM.YYYY at start of line
-  // Transaction line examples:
-  //   "02.02.26 SU PAGO EN USD 485,78-"
-  //   "04.11.25 265325* MERPAGO*VL2 Cuota 04/06 38.787,66"
-  //   "26.02.26 IMPUESTO DE SELLOS $ 1.546,89"
-  // Require amounts to have comma + 2 decimals (Argentine format: 137.476,81)
-  // This prevents matching reference numbers like 001743001743 as amounts
-  const txnRe = /^(\d{2}\.\d{2}\.\d{2,4})\s+(?:\d+\*\s+|=)?(.+?)\s+([\d.]+,\d{2}-?)\s*(?:([\d.]+,\d{2}-?))?$/;
-
-  for (const line of lines) {
-    if (/FECHA\s+COMPROBANTE\s+DETALLE/i.test(line) || /En pesos\s+De compras/i.test(line)) { inTxns = true; continue; }
-    if (/SALDO ACTUAL/i.test(line)) { inTxns = false; continue; }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/FECHA\s+COMPROBANTE\s+DETALLE/i.test(line) || /DETALLE DEL CONSUMO/i.test(line) || /FECHA\s+REFERENCIA/i.test(line) || /En pesos\s+De compras/i.test(line)) { inTxns = true; continue; }
+    if (/SALDO ACTUAL/i.test(line) || /TOTAL A PAGAR/i.test(line) || /^TARJETA.*Total/i.test(line)) { inTxns = false; continue; }
     if (!inTxns) continue;
-    if (SKIP_LINES.test(line.trim())) continue;
+    if (SKIP_RE.test(line.trim()) || MONTHS_RE.test(line.trim())) continue;
 
-    const m = line.match(txnRe);
-    if (!m) continue;
+    const dm = line.match(/^(\d{2})[.-](\d{2})[.-](\d{2,4})/);
+    if (!dm) continue;
 
-    const [, dateStr, descRaw, col1, col2] = m;
-    const dp = dateStr.split('.');
-    const y = dp[2].length===2 ? 2000+parseInt(dp[2]) : parseInt(dp[2]);
-    const pd = new Date(y, parseInt(dp[1])-1, parseInt(dp[0]));
+    const y = dm[3].length === 2 ? 2000 + parseInt(dm[3]) : parseInt(dm[3]);
+    const pd = new Date(y, parseInt(dm[2]) - 1, parseInt(dm[1]));
     if (isNaN(pd.getTime())) continue;
 
-    const desc = descRaw.replace(/\s+/g,' ').trim();
-    // Skip payments to bank and balance lines
+    const afterDate = line.slice(dm[0].length).trim();
+
+    const amts = [];
+    const amtRe = /([\d.]+,\d{2})-?/g;
+    let am;
+    while ((am = amtRe.exec(afterDate)) !== null) {
+      const before = afterDate.slice(Math.max(0, am.index - 1), am.index);
+      if (before === '%') continue;
+      if (afterDate[am.index + am[0].length] === '%') continue;
+      const openP = afterDate.lastIndexOf('(', am.index);
+      const closeP = afterDate.lastIndexOf(')', am.index);
+      if (openP > closeP) continue;
+      amts.push({ val: pAR(am[0]), pos: am.index, len: am[0].length });
+    }
+    if (!amts.length) continue;
+
+    const lastAmt = amts[amts.length - 1];
+    const descPart = afterDate.slice(0, lastAmt.pos).trim();
+
+    let desc = descPart
+      .replace(/^\*\s+/, '')
+      .replace(/^=\s*/, '')
+      .replace(/(?:^|\s)\d+\*\s+/, ' ')
+      .replace(/\s*\d{3,6}\s*$/, '')
+      .replace(/\s*\$\s*$/, '')
+      .replace(/\s*P\s*\$\s*$/, '')
+      .replace(/\s+[\d.]+,\d{2}\s*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     if (!desc || /^(SU PAGO EN|SALDO ANTERIOR|DEV\.IMP\.)/i.test(desc)) continue;
 
-    // col1 = pesos amount, col2 = dollars amount (if present)
-    const amtARS = pAR(col1);
-    const amtUSD = col2 ? pAR(col2) : 0;
-
-    // Negative = pago/devolución (crédito), positive = gasto
-    if (!amtARS && !amtUSD) continue;
-
-    const isUSD = amtUSD !== 0 && amtARS === 0;
-    const rawAmt = isUSD ? amtUSD : amtARS;
-    const isCredit = rawAmt < 0; // payments back
+    const rawAmt = lastAmt.val;
+    if (!rawAmt) continue;
+    const isCredit = rawAmt < 0;
     const amount = Math.abs(rawAmt);
-    if (!amount) continue;
 
-    // Detect cuotas
-    const cm = desc.match(/[Cc]uota[s]?\s*(\d{1,2})\s*[\/\-]\s*(\d{1,2})/);
+    let isUSD = /USD/i.test(desc);
+
+    const cm = desc.match(/[Cc]uota[s]?\s*(\d{1,2})\s*[\/\-]\s*(\d{1,2})/) || desc.match(/\b(\d{2})\/(\d{2})\b/);
+    let cuotaNum = null, cuotaTotal = null;
+    if (cm) {
+      const n = parseInt(cm[1]), t = parseInt(cm[2]);
+      if (t >= 2 && t <= 48 && n <= t) {
+        cuotaNum = n;
+        cuotaTotal = t;
+        desc = desc.replace(cm[0], '').replace(/\s+/g, ' ').trim();
+      }
+    }
+
+    desc = desc.replace(/\s*\d{3,6}\s*$/, '').trim();
+    const cat = auto_cat(desc) || learnedCat(desc) || '';
 
     txns.push({
-      id: uid(), date: pd, description: desc, amount: Math.round(amount*100)/100,
+      id: uid(), date: pd, description: desc, amount: Math.round(amount * 100) / 100,
       currency: isUSD ? 'USD' : 'ARS',
-      category: auto_cat(desc),
+      category: cat,
       status: isCredit ? 'COBRADO' : 'PAGADO',
-      bank: 'Galicia', tcId: tcId,
-      empresa: '', cuotaNum: cm?parseInt(cm[1]):null, cuotaTotal: cm?parseInt(cm[2]):null,
-      month: pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'),
+      bank: 'Galicia', tcId,
+      empresa: '', cuotaNum, cuotaTotal,
+      month: pd.getFullYear() + '-' + String(pd.getMonth() + 1).padStart(2, '0'),
       week: '', source: 'tc'
     });
   }
