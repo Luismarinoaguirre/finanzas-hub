@@ -6112,6 +6112,16 @@ function getFilteredTxns() {
   else if (reimbFilter === 'is-reimbursement') txns = txns.filter(t => !!t.reimbursementFor);
   if (reviewFilter === 'review') txns = txns.filter(t => !!t.needsReview);
   else if (reviewFilter === 'ok') txns = txns.filter(t => !t.needsReview);
+  // Inject conversions as virtual items
+  const convs = (state.conversions || []).map(c => ({
+    ...c, _isConversion: true, date: new Date(c.date),
+    description: `Cambio USD → ARS · ${fmtN(c.usd)} USD @ $${fmtN(c.rate)}`,
+    amount: c.ars, currency: 'ARS', category: 'Transferencia',
+    status: 'CONVERSIÓN', bank: 'Cocos Capital'
+  }));
+  const monthF = document.getElementById('filter-month')?.value;
+  const filtered = monthF ? convs.filter(c => getMonthKey(c.date) === monthF) : convs;
+  txns = [...txns, ...filtered];
   return txns.sort((a,b) => new Date(b.date)-new Date(a.date));
 }
 
@@ -6134,6 +6144,23 @@ function renderTxnPage(txns) {
   tbody.innerHTML = page.map(t => {
     const d = t.date instanceof Date ? t.date : new Date(t.date);
     const dateStr = d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    if (t._isConversion) {
+      return `<tr style="background:rgba(59,130,246,0.04);">
+        <td style="color:var(--text-tertiary);font-size:12px;">${dateStr}</td>
+        <td class="td-desc" style="color:var(--blue);">💱 ${esc(t.description)}</td>
+        <td><span class="badge" style="background:var(--blue)11;color:var(--blue);border:1px solid var(--blue)33;">Conversión</span></td>
+        <td style="font-size:12px;">${esc(t.bank||'—')}</td>
+        <td><span class="badge" style="background:var(--blue)11;color:var(--blue);border:1px solid var(--blue)33;">CAMBIO</span></td>
+        <td class="td-amount" style="line-height:1.2;">
+          <div style="font-size:13px;font-weight:600;color:var(--red);">-U$D ${fmtN(t.usd)}</div>
+          <div style="font-size:11px;color:var(--green);margin-top:2px;">+$${fmtN(t.ars)}</div>
+        </td>
+        <td style="text-align:center;font-size:12px;color:var(--text-tertiary);">—</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-danger btn-icon btn-sm" onclick="deleteConversion('${t.id}')" title="Eliminar">✕</button>
+        </td>
+      </tr>`;
+    }
     const status = t.status||'PAGADO';
     const statusCls = status.toLowerCase().replace(' ','-');
     const tc = t.tcId ? state.creditCards.find(c=>c.id===t.tcId) : null;
