@@ -3138,9 +3138,12 @@ async function supabaseSyncFull() {
         state.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
       }
       const localCats = state.categories || [];
+      const localInitBal = state.usdInitialBalance;
       const { transactions: _ct, categories: cloudCats, ...cloudConfig } = cloudState;
       const mergedCats = [...new Set([...localCats, ...(cloudCats || [])])];
       state = { ...state, ...cloudConfig, transactions: state.transactions, categories: mergedCats };
+      if (state.usdInitialBalance === undefined) state.usdInitialBalance = localInitBal || 0;
+      state.conversions = state.conversions || [];
     }
     localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
     localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
@@ -3286,6 +3289,8 @@ function loadState() {
   state.monthlyIncome = state.monthlyIncome || {};
   state.ignoredDupes = state.ignoredDupes || [];
   state.excludedCats = state.excludedCats || ['Transferencia'];
+  state.conversions = state.conversions || [];
+  if (state.usdInitialBalance === undefined) state.usdInitialBalance = 0;
   if (typeof runCatNormalization === 'function') runCatNormalization();
 }
 
@@ -3304,7 +3309,10 @@ async function loadStateFromSupabase() {
       const localCats = state.categories || [];
       const { transactions: _ct, categories: cloudCats, ...cloudConfig } = cloudState;
       const mergedCats = [...new Set([...localCats, ...(cloudCats || [])])];
+      const localInitBal = state.usdInitialBalance;
       state = { ...state, ...cloudConfig, transactions: Object.values(byId), categories: mergedCats };
+      if (state.usdInitialBalance === undefined) state.usdInitialBalance = localInitBal || 0;
+      state.conversions = state.conversions || [];
       state.transactions.forEach(t => { if (t.date && typeof t.date === 'string') t.date = new Date(t.date); });
       localStorage.setItem('finanzas_hub_v4', JSON.stringify(state));
       localStorage.setItem('finanzas_hub_v4_ts', Date.now().toString());
