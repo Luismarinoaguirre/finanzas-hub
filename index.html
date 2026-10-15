@@ -5768,27 +5768,38 @@ function renderUSDBalance() {
         <span style="font-weight:600;color:var(--red);">-U$D ${fmtN(c.usd)}</span>
         <span style="color:var(--text-tertiary);">@ $${fmtN(c.rate)}</span>
         <span style="font-weight:600;color:var(--green);">+$${fmtN(c.ars)}</span>
-        <button onclick="deleteConversion('${c.id}')" style="border:none;background:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px;" title="Eliminar">×</button>
+        <span style="display:flex;gap:2px;">
+          <button onclick="openConversionModal('${c.id}')" style="border:none;background:none;color:var(--text-tertiary);cursor:pointer;font-size:12px;padding:2px;" title="Editar">✎</button>
+          <button onclick="deleteConversion('${c.id}')" style="border:none;background:none;color:var(--text-tertiary);cursor:pointer;font-size:14px;padding:2px;" title="Eliminar">×</button>
+        </span>
       </div>${loanInfo}
     </div>`;
   }).join('');
 }
 
-function openConversionModal() {
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('conv-date').value = today;
-  document.getElementById('conv-usd').value = '';
-  document.getElementById('conv-ars').value = '';
-  document.getElementById('conv-notes').value = '';
-  document.getElementById('conv-loan').checked = false;
-  document.getElementById('conv-loan-fields').style.display = 'none';
-  document.getElementById('conv-loan-track').style.background = 'var(--glass-border)';
-  document.getElementById('conv-loan-thumb').style.left = '2px';
-  document.getElementById('conv-loan-amount').value = '';
-  document.getElementById('conv-loan-to').value = '';
+let editingConvId = null;
+
+function openConversionModal(id) {
+  editingConvId = id || null;
+  const conv = editingConvId ? (state.conversions || []).find(c => c.id === editingConvId) : null;
+  document.getElementById('conv-date').value = conv ? conv.date : new Date().toISOString().split('T')[0];
+  document.getElementById('conv-usd').value = conv ? conv.usd : '';
+  document.getElementById('conv-rate').value = conv ? conv.rate : (_mepData ? _mepData.compra : state.usdRate);
+  document.getElementById('conv-ars').value = conv ? conv.ars : '';
+  document.getElementById('conv-notes').value = conv ? (conv.notes || '') : '';
+  const hasLoan = conv && conv.loanAmount > 0;
+  document.getElementById('conv-loan').checked = hasLoan;
+  document.getElementById('conv-loan-fields').style.display = hasLoan ? 'grid' : 'none';
+  document.getElementById('conv-loan-track').style.background = hasLoan ? 'var(--blue)' : 'var(--glass-border)';
+  document.getElementById('conv-loan-thumb').style.left = hasLoan ? '20px' : '2px';
+  document.getElementById('conv-loan-amount').value = hasLoan ? conv.loanAmount : '';
+  document.getElementById('conv-loan-to').value = conv && conv.loanTo ? conv.loanTo : '';
   document.getElementById('conv-loan-result').textContent = '';
-  const rate = _mepData ? _mepData.compra : state.usdRate;
-  document.getElementById('conv-rate').value = rate;
+  if (hasLoan) updateConvLoanPreview();
+  const title = document.querySelector('#modal-conversion .modal-title');
+  const btn = document.querySelector('#modal-conversion .btn-primary');
+  if (title) title.textContent = conv ? '✎ Editar cambio USD → ARS' : '💱 Registrar cambio USD → ARS';
+  if (btn) btn.textContent = conv ? '✓ Guardar cambios' : '💱 Registrar cambio';
   document.getElementById('conv-rate-hint').textContent = _mepData
     ? 'MEP compra actual: $' + fmtN(_mepData.compra) + ' · Editá si Cocos te dio otro precio'
     : 'Ingresá el tipo de cambio al que vendiste';
@@ -5828,15 +5839,24 @@ function saveConversion() {
   const loanAmount = hasLoan ? (parseFloat(document.getElementById('conv-loan-amount').value) || 0) : 0;
   const loanTo = hasLoan ? (document.getElementById('conv-loan-to').value.trim() || null) : null;
   if (!state.conversions) state.conversions = [];
-  const conv = { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), date, usd, rate, ars, notes };
-  if (loanAmount > 0) { conv.loanAmount = loanAmount; conv.loanTo = loanTo; }
-  state.conversions.push(conv);
+  if (editingConvId) {
+    const idx = state.conversions.findIndex(c => c.id === editingConvId);
+    if (idx >= 0) {
+      state.conversions[idx] = { ...state.conversions[idx], date, usd, rate, ars, notes, loanAmount: loanAmount > 0 ? loanAmount : undefined, loanTo: loanAmount > 0 ? loanTo : undefined };
+    }
+    editingConvId = null;
+  } else {
+    const conv = { id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), date, usd, rate, ars, notes };
+    if (loanAmount > 0) { conv.loanAmount = loanAmount; conv.loanTo = loanTo; }
+    state.conversions.push(conv);
+  }
   if (!state.usdRateHistory) state.usdRateHistory = {};
   state.usdRateHistory[date] = state.usdRateHistory[date] || { compra: rate, venta: rate };
   saveState();
   closeModal('modal-conversion');
   renderUSDBalance();
-  showToast(`Cambio registrado: U$D ${fmtN(usd)} → $${fmtN(ars)}`, 'success');
+  if (document.getElementById('page-transactions')?.classList.contains('active')) renderTransactions();
+  showToast(editingConvId === null ? `Cambio guardado: U$D ${fmtN(usd)} → $${fmtN(ars)}` : `Cambio registrado: U$D ${fmtN(usd)} → $${fmtN(ars)}`, 'success');
 }
 
 function deleteConversion(id) {
@@ -6206,6 +6226,7 @@ function renderTxnPage(txns) {
         </td>
         <td style="text-align:center;font-size:12px;color:var(--text-tertiary);">—</td>
         <td style="white-space:nowrap;">
+          <button class="btn btn-glass btn-icon btn-sm" onclick="openConversionModal('${t.id}')" title="Editar">✎</button>
           <button class="btn btn-danger btn-icon btn-sm" onclick="deleteConversion('${t.id}')" title="Eliminar">✕</button>
         </td>
       </tr>`;
